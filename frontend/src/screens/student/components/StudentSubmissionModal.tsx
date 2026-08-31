@@ -1,6 +1,6 @@
 ﻿import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
-import { Check, Eye, FileText, Image as ImageIcon, Pencil } from "lucide-react";
+import { Check, Code2, Eye, FileText, Image as ImageIcon, Pencil } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import type { ClassActivity } from "../services/studentClassroomService";
@@ -17,6 +17,7 @@ type StudentSubmissionModalProps = {
 };
 
 const getSubmissionTypeLabel = (type: string) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Image";
   if (type === "file") return "File";
   return "Essay";
@@ -39,11 +40,12 @@ export function StudentSubmissionModal({
   const isPreviewing = Boolean(activity && previewActivityId === activity.id);
 
   const isEssay = activity?.submissionType === "essay";
+  const isCode = activity?.submissionType === "code";
   const isImage = activity?.submissionType === "image";
   const trimmedEssay = essayContent.trim();
   const trimmedFileName = fileName.trim();
   const canPreview = activity
-    ? isEssay
+    ? isEssay || isCode
       ? trimmedEssay.length > 0
       : trimmedFileName.length > 0
     : false;
@@ -100,9 +102,14 @@ export function StudentSubmissionModal({
                     </div>
                   </div>
 
-                  {isEssay ? (
+                  {isEssay || isCode ? (
                     <div className="max-h-72 overflow-y-auto rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_92%,transparent)] p-3">
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--app-text)]">
+                      <p
+                        className={[
+                          "text-sm leading-6 text-[var(--app-text)]",
+                          isCode ? "whitespace-pre font-mono" : "whitespace-pre-wrap",
+                        ].join(" ")}
+                      >
                         {trimmedEssay}
                       </p>
                     </div>
@@ -121,17 +128,31 @@ export function StudentSubmissionModal({
                 </div>
               ) : (
                 <>
-                  {activity.submissionType === "essay" ? (
+                  {activity.submissionType === "essay" ||
+                  activity.submissionType === "code" ? (
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-[var(--app-text)]">
-                        Essay Content
+                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--app-text)]">
+                        {activity.submissionType === "code" && (
+                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
+                        )}
+                        {activity.submissionType === "code"
+                          ? "Code Content"
+                          : "Essay Content"}
                       </label>
                       <textarea
                         value={essayContent}
                         onChange={(event) => onChangeEssay(event.target.value)}
-                        rows={7}
-                        className="theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 py-2 text-sm text-[var(--app-text)]"
-                        placeholder="Write your essay here..."
+                        rows={activity.submissionType === "code" ? 10 : 7}
+                        spellCheck={activity.submissionType !== "code"}
+                        className={[
+                          "theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 py-2 text-sm text-[var(--app-text)]",
+                          activity.submissionType === "code" ? "font-mono" : "",
+                        ].join(" ")}
+                        placeholder={
+                          activity.submissionType === "code"
+                            ? "Paste or write your code here..."
+                            : "Write your essay here..."
+                        }
                       />
                     </div>
                   ) : (

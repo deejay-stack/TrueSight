@@ -7,7 +7,7 @@ import {
   Home,
   Loader2,
   Menu,
-  Settings,
+  Upload,
   WandSparkles,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -33,12 +33,16 @@ import {
   type TeacherSection,
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
+import {
+  SUPPORT_SIDEBAR_ITEMS,
+  SUPPORT_SIDEBAR_LABEL,
+} from "../../utils/sidebarNavigation";
 
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
-  { key: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -165,6 +169,19 @@ export default function SubmissionAnalysisReportPage() {
     navigate("/auth/login_screen", { replace: true });
   };
 
+  const handleOpenNotification = (notification: ActivityNotification) => {
+    setNotificationsOpen(false);
+
+    if (notification.relatedSubmissionId) {
+      navigate(`/teacher/submissions/${notification.relatedSubmissionId}`);
+      return;
+    }
+
+    if (notification.activityId) {
+      navigate(`/teacher/activities/${notification.activityId}`);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!submissionId || isAnalyzing) return;
 
@@ -191,6 +208,8 @@ export default function SubmissionAnalysisReportPage() {
     >
       <TeacherSidebar
         items={[...SIDEBAR_ITEMS]}
+        footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
+        footerLabel={SUPPORT_SIDEBAR_LABEL}
         activeSection={"classes" as TeacherSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(section) => navigate(`/teacher/teacher_screen/${section}`)}
@@ -224,6 +243,7 @@ export default function SubmissionAnalysisReportPage() {
               onToggle={() => setNotificationsOpen((current) => !current)}
               onClose={() => setNotificationsOpen(false)}
               onRefresh={() => void loadNotifications()}
+              onNotificationClick={handleOpenNotification}
             />
           </div>
         </div>

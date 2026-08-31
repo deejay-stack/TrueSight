@@ -6,7 +6,7 @@ export const canAccessRouteOffline = (pathname: string) => {
   if (pathname === "/offline") return true;
   if (pathname === "/" || pathname.startsWith("/auth/")) return true;
   if (pathname === "/student/student_screen") return true;
-  if (/^\/student\/student_screen\/(home|enrolled|settings)$/.test(pathname)) return true;
+  if (/^\/student\/student_screen\/(home|enrolled|settings|about)$/.test(pathname)) return true;
   if (pathname.startsWith("/teacher/teacher_screen")) return true;
   if (pathname === "/teacher/integrity-analytics" || pathname === "/teacher/analytics") {
     return true;

@@ -8,12 +8,14 @@ import {
   Home,
   Loader2,
   Menu,
-  Settings,
+  Save,
+  Upload,
   WandSparkles,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
+import { Input } from "../../components/ui/Input";
 import { GlobalThemeToggle } from "../../components/theme/GlobalThemeToggle";
 import { ActivityNotificationsPopover } from "../../components/ActivityNotificationsPopover";
 import { useAuth } from "../../context/useAuth";
@@ -23,6 +25,7 @@ import {
   fetchDocumentPreview,
   fetchSubmissionDetail,
   fetchUserNotifications,
+  saveSubmissionEvaluation,
   type ActivityNotification,
   type ClassSubmission,
   type PreviewDocument,
@@ -32,12 +35,16 @@ import {
   type TeacherSection,
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
+import {
+  SUPPORT_SIDEBAR_ITEMS,
+  SUPPORT_SIDEBAR_LABEL,
+} from "../../utils/sidebarNavigation";
 
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
-  { key: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -88,6 +95,13 @@ export default function SubmissionDetailPage() {
   const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [evaluationForm, setEvaluationForm] = useState({
+    comments: "",
+    remarks: "",
+    grade: "",
+    score: "",
+  });
+  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
   const loadSubmission = async () => {
     if (!submissionId) return;
@@ -123,6 +137,18 @@ export default function SubmissionDetailPage() {
     void Promise.all([loadSubmission(), loadNotifications()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submissionId]);
+
+  useEffect(() => {
+    if (!submission) return;
+
+    setEvaluationForm({
+      comments: submission.teacherComments ?? "",
+      remarks: submission.teacherRemarks ?? "",
+      grade: submission.teacherGrade ?? "",
+      score:
+        submission.teacherScore === null ? "" : String(submission.teacherScore),
+    });
+  }, [submission]);
 
   useEffect(() => {
     let active = true;
@@ -177,6 +203,19 @@ export default function SubmissionDetailPage() {
     navigate("/auth/login_screen", { replace: true });
   };
 
+  const handleOpenNotification = (notification: ActivityNotification) => {
+    setNotificationsOpen(false);
+
+    if (notification.relatedSubmissionId) {
+      navigate(`/teacher/submissions/${notification.relatedSubmissionId}`);
+      return;
+    }
+
+    if (notification.activityId) {
+      navigate(`/teacher/activities/${notification.activityId}`);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!submissionId || isAnalyzing) return;
 
@@ -197,12 +236,55 @@ export default function SubmissionDetailPage() {
     }
   };
 
+  const handleSaveEvaluation = async () => {
+    if (!submission || isSavingEvaluation) return;
+
+    const parsedScore =
+      evaluationForm.score.trim() === "" ? null : Number(evaluationForm.score);
+
+    if (
+      parsedScore !== null &&
+      (!Number.isFinite(parsedScore) ||
+        parsedScore < 0 ||
+        parsedScore > submission.maxScore)
+    ) {
+      toast.error(`Score must be between 0 and ${submission.maxScore}.`);
+      return;
+    }
+
+    setIsSavingEvaluation(true);
+
+    try {
+      await saveSubmissionEvaluation(submission.id, {
+        comments: evaluationForm.comments.trim(),
+        remarks: evaluationForm.remarks.trim(),
+        grade: evaluationForm.grade.trim(),
+        score: parsedScore,
+      });
+      toast.success("Evaluation saved.");
+      await loadSubmission();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save evaluation.";
+      toast.error(message);
+    } finally {
+      setIsSavingEvaluation(false);
+    }
+  };
+
   const renderSubmissionContent = () => {
     if (!submission) return null;
 
     if (submission.contentText?.trim()) {
       return (
-        <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm text-[var(--app-text)]">
+        <pre
+          className={[
+            "max-h-[360px] overflow-auto rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm text-[var(--app-text)]",
+            submission.submissionType === "code"
+              ? "whitespace-pre font-mono"
+              : "whitespace-pre-wrap",
+          ].join(" ")}
+        >
           {submission.contentText}
         </pre>
       );
@@ -242,6 +324,8 @@ export default function SubmissionDetailPage() {
     >
       <TeacherSidebar
         items={[...SIDEBAR_ITEMS]}
+        footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
+        footerLabel={SUPPORT_SIDEBAR_LABEL}
         activeSection={"classes" as TeacherSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(section) => navigate(`/teacher/teacher_screen/${section}`)}
@@ -275,6 +359,7 @@ export default function SubmissionDetailPage() {
               onToggle={() => setNotificationsOpen((current) => !current)}
               onClose={() => setNotificationsOpen(false)}
               onRefresh={() => void loadNotifications()}
+              onNotificationClick={handleOpenNotification}
             />
           </div>
         </div>
@@ -379,6 +464,9 @@ export default function SubmissionDetailPage() {
                     <p className="font-semibold text-[var(--app-text)]">{submission.submissionType}</p>
                     <p className="text-xs theme-muted">
                       Due: {new Date(submission.dueDate).toLocaleString()}
+                    </p>
+                    <p className="text-xs theme-muted">
+                      Max score: {submission.maxScore}
                     </p>
                   </div>
                 </div>
@@ -523,6 +611,110 @@ export default function SubmissionDetailPage() {
                     <p className="mt-2 text-sm theme-muted">{analysisMessage}</p>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="theme-card">
+              <CardContent className="space-y-4 p-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--app-text)]">
+                    Teacher Evaluation
+                  </h3>
+                  <p className="text-sm theme-muted">
+                    Save academic feedback separately from AI detection results.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                      Score
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={submission.maxScore}
+                      step="0.01"
+                      value={evaluationForm.score}
+                      onChange={(event) =>
+                        setEvaluationForm((previous) => ({
+                          ...previous,
+                          score: event.target.value,
+                        }))
+                      }
+                      placeholder={`0-${submission.maxScore}`}
+                      className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                      Grade
+                    </label>
+                    <Input
+                      value={evaluationForm.grade}
+                      onChange={(event) =>
+                        setEvaluationForm((previous) => ({
+                          ...previous,
+                          grade: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. 85%"
+                      className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                      Remarks
+                    </label>
+                    <Input
+                      value={evaluationForm.remarks}
+                      onChange={(event) =>
+                        setEvaluationForm((previous) => ({
+                          ...previous,
+                          remarks: event.target.value,
+                        }))
+                      }
+                      placeholder="Needs Revision"
+                      className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                    Comments
+                  </label>
+                  <textarea
+                    value={evaluationForm.comments}
+                    onChange={(event) =>
+                      setEvaluationForm((previous) => ({
+                        ...previous,
+                        comments: event.target.value,
+                      }))
+                    }
+                    rows={5}
+                    placeholder="Write teacher feedback for the student..."
+                    className="theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 py-2 text-sm leading-6 text-[var(--app-text)]"
+                  />
+                </div>
+
+                {submission.evaluatedAt && (
+                  <p className="text-xs theme-muted">
+                    Last reviewed {new Date(submission.evaluatedAt).toLocaleString()}
+                  </p>
+                )}
+
+                <Button
+                  onClick={() => void handleSaveEvaluation()}
+                  disabled={isSavingEvaluation}
+                >
+                  {isSavingEvaluation ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  {isSavingEvaluation ? "Saving..." : "Save Evaluation"}
+                </Button>
               </CardContent>
             </Card>
           </>

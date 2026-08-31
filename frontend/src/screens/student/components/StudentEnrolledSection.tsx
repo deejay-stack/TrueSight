@@ -20,6 +20,7 @@ type StudentEnrolledSectionProps = {
 };
 
 const getSubmissionTypeLabel = (type: string) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Image";
   if (type === "file") return "File";
   return "Essay";
@@ -112,6 +113,11 @@ export function StudentEnrolledSection({
                       {activity.mySubmission && (
                         <div className="mt-3 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] px-3 py-2 text-xs theme-muted">
                           <p>Status: {activity.mySubmission.status}</p>
+                          {activity.mySubmission.teacherScore !== null && (
+                            <p>
+                              Score: {activity.mySubmission.teacherScore}/{activity.maxScore}
+                            </p>
+                          )}
                         </div>
                       )}
 

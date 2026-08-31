@@ -7,8 +7,8 @@ import {
   CalendarClock,
   Home,
   RefreshCw,
-  Settings,
   ShieldCheck,
+  Upload,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import toast from "react-hot-toast";
@@ -31,12 +31,16 @@ import {
   type TeacherSection,
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
+import {
+  SUPPORT_SIDEBAR_ITEMS,
+  SUPPORT_SIDEBAR_LABEL,
+} from "../../utils/sidebarNavigation";
 
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
-  { key: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -147,6 +151,19 @@ export default function IntegrityAnalyticsPage() {
     navigate("/auth/login_screen", { replace: true });
   };
 
+  const handleOpenNotification = (notification: ActivityNotification) => {
+    setNotificationsOpen(false);
+
+    if (notification.relatedSubmissionId) {
+      navigate(`/teacher/submissions/${notification.relatedSubmissionId}`);
+      return;
+    }
+
+    if (notification.activityId) {
+      navigate(`/teacher/activities/${notification.activityId}`);
+    }
+  };
+
   const trendChartData = useMemo(
     () =>
       (analytics?.monthlyTrends ?? []).map((trend) => ({
@@ -181,6 +198,8 @@ export default function IntegrityAnalyticsPage() {
     >
       <TeacherSidebar
         items={[...SIDEBAR_ITEMS]}
+        footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
+        footerLabel={SUPPORT_SIDEBAR_LABEL}
         activeSection={"home" as TeacherSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(section) => navigate(`/teacher/teacher_screen/${section}`)}
@@ -220,6 +239,7 @@ export default function IntegrityAnalyticsPage() {
               onDelete={(notificationId) =>
                 void handleDeleteNotification(notificationId)
               }
+              onNotificationClick={handleOpenNotification}
             />
           </div>
         </div>

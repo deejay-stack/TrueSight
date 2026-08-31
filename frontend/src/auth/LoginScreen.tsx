@@ -45,7 +45,7 @@ export default function LoginScreen() {
             </h1>
 
             <p className="mx-auto mt-6 max-w-3xl text-base leading-7 theme-muted sm:text-lg">
-              A simple and intelligent LMS designed to support teachers and
+              An LMS designed to support teachers and
               students in managing academic submissions
               and promoting academic integrity through AI-assisted text and
               image analysis.

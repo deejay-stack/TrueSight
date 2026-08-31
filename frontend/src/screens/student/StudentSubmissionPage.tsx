@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Code2,
   FileUp,
   Image as ImageIcon,
   Loader2,
@@ -60,6 +61,7 @@ const formatDateTime = (value: string | null) => {
 };
 
 const getSubmissionTypeLabel = (type: string) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Image";
   if (type === "file") return "File";
   return "Essay";
@@ -110,7 +112,12 @@ export default function StudentSubmissionPage() {
     try {
       const payload = await fetchActivityDetail(activityId);
       setDetail(payload);
-      setEssayContent(payload.mySubmission?.contentText ?? "");
+      setEssayContent(
+        payload.mySubmission?.contentText ??
+          (payload.activity.submissionType === "code"
+            ? payload.activity.starterCode ?? ""
+            : ""),
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load activity.";
       toast.error(message);
@@ -200,8 +207,15 @@ export default function StudentSubmissionPage() {
       return;
     }
 
-    if (activity.submissionType === "essay" && !essayContent.trim()) {
-      toast.error("Essay submission requires text content.");
+    if (
+      (activity.submissionType === "essay" || activity.submissionType === "code") &&
+      !essayContent.trim()
+    ) {
+      toast.error(
+        activity.submissionType === "code"
+          ? "Code submission requires code content."
+          : "Essay submission requires text content.",
+      );
       return;
     }
 
@@ -216,9 +230,9 @@ export default function StudentSubmissionPage() {
     }
 
     setIsSubmitting(true);
-    setServerUploadProgress(activity.submissionType === "essay" ? 100 : 0);
+    setServerUploadProgress(hasUploadPayload ? 0 : 100);
     setSubmissionStatusText(
-      activity.submissionType === "essay"
+      !hasUploadPayload
         ? "Analyzing your submission..."
         : "Uploading... 0%",
     );
@@ -228,17 +242,19 @@ export default function StudentSubmissionPage() {
         activityId,
         {
           contentText:
-            activity.submissionType === "essay" ? essayContent.trim() : undefined,
-          fileName:
-            activity.submissionType === "essay" ? undefined : preparedUpload?.fileName,
-          fileType:
-            activity.submissionType === "essay" ? undefined : preparedUpload?.fileType,
-          fileSize:
-            activity.submissionType === "essay" ? undefined : preparedUpload?.fileSize,
-          fileDataUrl:
             activity.submissionType === "essay"
-              ? undefined
-              : preparedUpload?.fileDataUrl,
+              ? essayContent.trim()
+              : activity.submissionType === "code"
+                ? essayContent
+              : undefined,
+          fileName:
+            !hasUploadPayload ? undefined : preparedUpload?.fileName,
+          fileType:
+            !hasUploadPayload ? undefined : preparedUpload?.fileType,
+          fileSize:
+            !hasUploadPayload ? undefined : preparedUpload?.fileSize,
+          fileDataUrl:
+            !hasUploadPayload ? undefined : preparedUpload?.fileDataUrl,
         },
         hasUploadPayload
           ? {
@@ -363,19 +379,40 @@ export default function StudentSubmissionPage() {
 
               <Card className="theme-card">
                 <CardContent className="space-y-4 p-5">
-                  {activity.submissionType === "essay" ? (
+                  {activity.submissionType === "essay" ||
+                  activity.submissionType === "code" ? (
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-[var(--app-text)]">
-                        Essay Content
+                      <label className="flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
+                        {activity.submissionType === "code" && (
+                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
+                        )}
+                        {activity.submissionType === "code"
+                          ? `${activity.programmingLanguage ?? "Code"} Submission`
+                          : "Essay Content"}
                       </label>
                       <textarea
                         value={essayContent}
                         onChange={(event) => setEssayContent(event.target.value)}
-                        rows={14}
+                        rows={activity.submissionType === "code" ? 18 : 14}
                         disabled={locked}
-                        className="theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)] px-4 py-3 text-sm leading-6 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-60"
-                        placeholder="Write your response here..."
+                        spellCheck={activity.submissionType !== "code"}
+                        className={[
+                          "theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)] px-4 py-3 text-sm leading-6 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-60",
+                          activity.submissionType === "code"
+                            ? "overflow-x-auto whitespace-pre font-mono"
+                            : "",
+                        ].join(" ")}
+                        placeholder={
+                          activity.submissionType === "code"
+                            ? "Paste or write your code here..."
+                            : "Write your response here..."
+                        }
                       />
+                      {activity.submissionType === "code" && (
+                        <p className="text-xs theme-muted">
+                          Indentation and line breaks are preserved. Submitted code is analyzed as text and is not executed.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">

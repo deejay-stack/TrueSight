@@ -1,9 +1,22 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Home, Menu, Plus, Settings, Sparkles } from "lucide-react";
+import {
+  AlertCircle,
+  BookOpen,
+  CheckCircle2,
+  Clock3,
+  FileImage,
+  Home,
+  Loader2,
+  Menu,
+  Plus,
+  Sparkles,
+  X,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
+import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -25,12 +38,16 @@ import {
 import {
   fetchClassActivities,
   fetchEnrolledClasses,
+  fetchMyEnrollmentRequests,
   fetchUserNotifications,
-  joinClassByCode,
+  lookupClassByCode,
   markNotificationRead,
+  submitEnrollmentRequest,
   type ActivityNotification,
+  type ClassJoinLookup,
   type ClassActivity,
   type EnrolledClass,
+  type EnrollmentRequest,
   deleteNotification,
 } from "./services/studentClassroomService";
 import {
@@ -39,15 +56,36 @@ import {
 } from "./components/StudentSidebar";
 import { StudentEnrolledSection } from "./components/StudentEnrolledSection";
 import { StudentSettingsPanel } from "./components/StudentSettingsPanel";
+import AboutTrueSightPage from "../shared/AboutTrueSightPage";
+import {
+  SUPPORT_SIDEBAR_ITEMS,
+  SUPPORT_SIDEBAR_LABEL,
+} from "../../utils/sidebarNavigation";
+import {
+  formatFileSize,
+  prepareFileUpload,
+  type PreparedFileUpload,
+} from "../../utils/documentPreview";
 
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "enrolled", label: "Enrolled", icon: BookOpen },
-  { key: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 const DEFAULT_SECTION: StudentSection = "home";
-const VALID_SECTIONS: StudentSection[] = ["home", "enrolled", "settings"];
+const VALID_SECTIONS: StudentSection[] = [
+  "home",
+  "enrolled",
+  "settings",
+  "about",
+];
+
+const SECTION_LABELS: Record<StudentSection, string> = {
+  home: "Home",
+  enrolled: "Enrolled",
+  settings: "Settings",
+  about: "About",
+};
 
 const isValidSection = (value?: string): value is StudentSection =>
   Boolean(value && VALID_SECTIONS.includes(value as StudentSection));
@@ -60,6 +98,32 @@ const wait = (duration: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, duration);
   });
+
+const getEnrollmentStatusCopy = (status: EnrollmentRequest["status"]) => {
+  if (status === "accepted") {
+    return "Your enrollment request has been approved. You are now enrolled in this class.";
+  }
+
+  if (status === "rejected") {
+    return "Your enrollment request was rejected. Please review your COR or contact your teacher.";
+  }
+
+  return "Your enrollment request is waiting for teacher approval.";
+};
+
+const getEnrollmentStatusIcon = (status: EnrollmentRequest["status"]) => {
+  if (status === "accepted") return CheckCircle2;
+  if (status === "rejected") return AlertCircle;
+  return Clock3;
+};
+
+const getEnrollmentStatusBadge = (
+  status: EnrollmentRequest["status"],
+): "success" | "destructive" | "warning" => {
+  if (status === "accepted") return "success";
+  if (status === "rejected") return "destructive";
+  return "warning";
+};
 
 export default function StudentScreen() {
   const navigate = useNavigate();
@@ -83,6 +147,15 @@ export default function StudentScreen() {
 
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [joinLookup, setJoinLookup] = useState<ClassJoinLookup | null>(null);
+  const [corUpload, setCorUpload] = useState<PreparedFileUpload | null>(null);
+  const [isPreparingCor, setIsPreparingCor] = useState(false);
+  const [corUploadProgress, setCorUploadProgress] = useState(0);
+  const [enrollmentRequests, setEnrollmentRequests] = useState<
+    EnrollmentRequest[]
+  >([]);
+  const [isLoadingEnrollmentRequests, setIsLoadingEnrollmentRequests] =
+    useState(true);
 
   const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
@@ -130,6 +203,24 @@ export default function StudentScreen() {
       toast.error(message);
     } finally {
       setIsLoadingClasses(false);
+    }
+  };
+
+  const loadEnrollmentRequests = async () => {
+    setIsLoadingEnrollmentRequests(true);
+
+    try {
+      const loaded = await fetchMyEnrollmentRequests();
+      setEnrollmentRequests(loaded);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load enrollment requests.";
+      toast.error(message);
+      setEnrollmentRequests([]);
+    } finally {
+      setIsLoadingEnrollmentRequests(false);
     }
   };
 
@@ -225,6 +316,7 @@ export default function StudentScreen() {
       try {
         await Promise.all([
           loadEnrolledClasses(),
+          loadEnrollmentRequests(),
           loadNotifications(),
           wait(MIN_DASHBOARD_SKELETON_MS),
         ]);
@@ -244,7 +336,11 @@ export default function StudentScreen() {
 
   useEffect(() => {
     const handleReconnect = () => {
-      void Promise.all([loadEnrolledClasses(), loadNotifications()]);
+      void Promise.all([
+        loadEnrolledClasses(),
+        loadEnrollmentRequests(),
+        loadNotifications(),
+      ]);
     };
 
     window.addEventListener(RECONNECTED_EVENT, handleReconnect);
@@ -287,9 +383,9 @@ export default function StudentScreen() {
     mainScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [activeSection, selectedClassId]);
 
-  const handleJoinClass = async () => {
+  const handleValidateClassCode = async () => {
     if (!online) {
-      toast.error("Internet access is required to join a class.");
+      toast.error("Internet access is required to validate a class code.");
       return;
     }
 
@@ -301,14 +397,94 @@ export default function StudentScreen() {
     setIsJoining(true);
 
     try {
-      const joined = await joinClassByCode(joinCode.trim());
-      toast.success(`Joined ${joined.name}`);
-      setJoinCode("");
-      await Promise.all([loadEnrolledClasses(), loadNotifications()]);
-      setSelectedClassId(joined.id);
-      goToSection("enrolled");
+      const lookup = await lookupClassByCode(joinCode.trim());
+      setJoinLookup(lookup);
+
+      if (lookup.enrollment) {
+        toast.success(`You are already enrolled in ${lookup.classroom.name}.`);
+        setSelectedClassId(lookup.classroom.id);
+        goToSection("enrolled");
+        return;
+      }
+
+      if (lookup.request?.status === "pending") {
+        toast("You already have a pending request for this class.");
+        return;
+      }
+
+      toast.success("Class code verified. Upload your COR to request enrollment.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to join class.";
+      const message =
+        error instanceof Error ? error.message : "Unable to validate class code.";
+      toast.error(message);
+      setJoinLookup(null);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleSelectCor = async (file: File | undefined) => {
+    if (!file) return;
+
+    setIsPreparingCor(true);
+    setCorUploadProgress(0);
+
+    try {
+      const upload = await prepareFileUpload(
+        file,
+        setCorUploadProgress,
+        "cor-upload",
+      );
+      setCorUpload(upload);
+      toast.success("COR image ready.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to prepare COR image.";
+      toast.error(message);
+      setCorUpload(null);
+      setCorUploadProgress(0);
+    } finally {
+      setIsPreparingCor(false);
+    }
+  };
+
+  const handleSubmitEnrollmentRequest = async () => {
+    if (!online) {
+      toast.error("Internet access is required to submit an enrollment request.");
+      return;
+    }
+
+    if (!joinLookup) {
+      toast.error("Validate a class code first.");
+      return;
+    }
+
+    if (!corUpload) {
+      toast.error("Please upload your COR image.");
+      return;
+    }
+
+    setIsJoining(true);
+
+    try {
+      await submitEnrollmentRequest({
+        code: joinLookup.classroom.code,
+        corFileName: corUpload.fileName,
+        corFileType: corUpload.fileType,
+        corFileSize: corUpload.fileSize,
+        corDataUrl: corUpload.fileDataUrl,
+      });
+      toast.success("Enrollment request submitted.");
+      setJoinCode("");
+      setJoinLookup(null);
+      setCorUpload(null);
+      setCorUploadProgress(0);
+      await Promise.all([loadEnrollmentRequests(), loadNotifications()]);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to submit enrollment request.";
       toast.error(message);
     } finally {
       setIsJoining(false);
@@ -386,20 +562,202 @@ export default function StudentScreen() {
 
       <Card className="theme-card">
         <CardContent className="space-y-4 p-5">
-          <p className="text-sm font-semibold text-[var(--app-text)]">Join Class by Code</p>
+          <div>
+            <p className="text-sm font-semibold text-[var(--app-text)]">
+              Request Class Enrollment
+            </p>
+            <p className="text-xs theme-muted">
+              Enter a valid class code, upload your COR, then wait for teacher approval.
+            </p>
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
               ref={joinInputRef}
               value={joinCode}
-              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+              onChange={(event) => {
+                setJoinCode(event.target.value.toUpperCase());
+                setJoinLookup(null);
+                setCorUpload(null);
+                setCorUploadProgress(0);
+              }}
               placeholder="e.g. ABC123-XY4"
               className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
             />
-            <Button onClick={handleJoinClass} disabled={isJoining || !online} title={!online ? "Internet access is required." : undefined}>
-              <Plus className="mr-2 h-4 w-4" />
-              {isJoining ? "Joining..." : "Join Class"}
+            <Button onClick={handleValidateClassCode} disabled={isJoining || !online} title={!online ? "Internet access is required." : undefined}>
+              {isJoining ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              Verify Code
             </Button>
           </div>
+
+          {joinLookup && !joinLookup.enrollment && (
+            <div className="space-y-4 rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wide theme-muted">Class</p>
+                  <p className="font-semibold text-[var(--app-text)]">
+                    {joinLookup.classroom.name}
+                  </p>
+                  <p className="text-xs theme-muted">
+                    Code: {joinLookup.classroom.code}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide theme-muted">Student</p>
+                  <p className="font-semibold text-[var(--app-text)]">{studentName}</p>
+                  <p className="text-xs theme-muted">
+                    Teacher: {joinLookup.classroom.teacherName}
+                  </p>
+                </div>
+              </div>
+
+              {joinLookup.request && (
+                <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3 text-sm theme-muted">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={getEnrollmentStatusBadge(joinLookup.request.status)}>
+                      {joinLookup.request.status}
+                    </Badge>
+                    <span>{getEnrollmentStatusCopy(joinLookup.request.status)}</span>
+                  </div>
+                  {joinLookup.request.rejectionNote && (
+                    <p className="mt-2 text-xs">
+                      Note: {joinLookup.request.rejectionNote}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {joinLookup.request?.status !== "pending" && (
+                <>
+                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] px-4 py-6 text-center transition hover:border-[var(--app-accent)]">
+                    <FileImage className="h-8 w-8 text-[var(--app-accent)]" />
+                    <span className="mt-2 text-sm font-semibold text-[var(--app-text)]">
+                      Upload Certificate of Registration
+                    </span>
+                    <span className="mt-1 text-xs theme-muted">
+                      PNG, JPG, JPEG, or WEBP up to 5 MB
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      onChange={(event) =>
+                        void handleSelectCor(event.currentTarget.files?.[0])
+                      }
+                    />
+                  </label>
+
+                  {isPreparingCor && (
+                    <p className="text-xs theme-muted">
+                      Preparing COR image... {corUploadProgress}%
+                    </p>
+                  )}
+
+                  {corUpload && (
+                    <div className="flex flex-col gap-3 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3 sm:flex-row sm:items-center">
+                      <img
+                        src={corUpload.fileDataUrl}
+                        alt="COR preview"
+                        className="h-28 w-full rounded-lg object-cover sm:w-40"
+                      />
+                      <div className="min-w-0 flex-1 text-sm">
+                        <p className="truncate font-semibold text-[var(--app-text)]">
+                          {corUpload.fileName}
+                        </p>
+                        <p className="text-xs theme-muted">
+                          {formatFileSize(corUpload.fileSize)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCorUpload(null);
+                          setCorUploadProgress(0);
+                        }}
+                        className="theme-ring inline-flex h-9 w-9 items-center justify-center rounded-lg border theme-border text-[var(--app-muted)] hover:bg-rose-500/10 hover:text-rose-500"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleSubmitEnrollmentRequest}
+                    disabled={isJoining || isPreparingCor || !corUpload || !online}
+                    title={!online ? "Internet access is required." : undefined}
+                  >
+                    {isJoining ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileImage className="mr-2 h-4 w-4" />
+                    )}
+                    Submit Enrollment Request
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="theme-card">
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <p className="text-sm font-semibold text-[var(--app-text)]">
+              Enrollment Requests
+            </p>
+            <p className="text-xs theme-muted">
+              Pending requests do not unlock class activities until accepted.
+            </p>
+          </div>
+
+          {isLoadingEnrollmentRequests ? (
+            <p className="text-sm theme-muted">Loading enrollment requests...</p>
+          ) : enrollmentRequests.length === 0 ? (
+            <p className="text-sm theme-muted">No enrollment requests yet.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {enrollmentRequests.map((request) => {
+                const Icon = getEnrollmentStatusIcon(request.status);
+
+                return (
+                  <div
+                    key={request.id}
+                    className="rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-[var(--app-text)]">
+                          {request.className}
+                        </p>
+                        <p className="text-xs theme-muted">
+                          {request.classCode} - {request.teacherName ?? "Teacher"}
+                        </p>
+                      </div>
+                      <Badge variant={getEnrollmentStatusBadge(request.status)}>
+                        <Icon className="mr-1 h-3.5 w-3.5" />
+                        {request.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-sm theme-muted">
+                      {getEnrollmentStatusCopy(request.status)}
+                    </p>
+                    {request.rejectionNote && (
+                      <p className="mt-2 text-xs theme-muted">
+                        Note: {request.rejectionNote}
+                      </p>
+                    )}
+                    <p className="mt-3 text-xs theme-muted">
+                      Submitted {new Date(request.submittedAt).toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -438,6 +796,8 @@ export default function StudentScreen() {
     >
       <StudentSidebar
         items={[...SIDEBAR_ITEMS]}
+        footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
+        footerLabel={SUPPORT_SIDEBAR_LABEL}
         activeSection={activeSection}
         mobileOpen={mobileSidebarOpen}
         enrolledClasses={enrolledClasses}
@@ -463,7 +823,7 @@ export default function StudentScreen() {
             <AppLogo variant="icon" iconClassName="hidden h-10 w-10 rounded-xl sm:grid" />
             <div className="min-w-0">
               <p className="text-xs theme-muted">
-                Student Panel - {activeSection}
+                Student Panel - {SECTION_LABELS[activeSection]}
               </p>
               <p className="truncate text-base font-semibold text-[var(--app-text)] sm:text-lg">
                 {welcomeGreeting}, {studentName}
@@ -503,6 +863,7 @@ export default function StudentScreen() {
           {activeSection === "home" && renderHome()}
           {activeSection === "enrolled" && renderEnrolled()}
           {activeSection === "settings" && renderSettings()}
+          {activeSection === "about" && <AboutTrueSightPage />}
         </div>
       </main>
 

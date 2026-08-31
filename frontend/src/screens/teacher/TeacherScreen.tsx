@@ -7,7 +7,7 @@ import {
   ClipboardList,
   Home,
   Menu,
-  Settings,
+  Upload,
   Users,
   Sparkles,
 } from "lucide-react";
@@ -39,15 +39,18 @@ import {
   fetchClassActivities,
   fetchClassStudents,
   fetchClassSubmissions,
+  fetchTeacherEnrollmentRequests,
   fetchTeacherAnalytics,
   fetchTeacherOverview,
   fetchUserNotifications,
   markNotificationRead,
+  reviewEnrollmentRequest,
   type ActivityNotification,
   type ActivitySubmissionType,
   type ClassActivity,
   type ClassSubmission,
   type EnrolledStudent,
+  type EnrollmentRequest,
   type TeacherAnalytics,
   type TeacherClass,
   type TeacherOverviewActivity,
@@ -65,8 +68,14 @@ import { TeacherClassesSection } from "./components/TeacherClassesSection";
 import { TeacherStudentsSection } from "./components/TeacherStudentsSection";
 import { TeacherActivitiesSection } from "./components/TeacherActivitiesSection";
 import { TeacherUpcomingSection } from "./components/TeacherUpcomingSection";
+import { TeacherUploadsSection } from "./components/TeacherUploadsSection";
+import AboutTrueSightPage from "../shared/AboutTrueSightPage";
 import { getDisplayInitials } from "../../utils/profileImage";
 import { prepareFileUpload } from "../../utils/documentPreview";
+import {
+  SUPPORT_SIDEBAR_ITEMS,
+  SUPPORT_SIDEBAR_LABEL,
+} from "../../utils/sidebarNavigation";
 import {
   getHasSeenWelcome,
   getWelcomeGreeting,
@@ -81,6 +90,9 @@ type ActivityFormState = {
   description: string;
   submissionType: ActivitySubmissionType;
   allowResubmission: boolean;
+  maxScore: number;
+  programmingLanguage: string;
+  starterCode: string;
   attachmentName: string;
   attachmentType: string;
   attachmentSize: number;
@@ -92,9 +104,9 @@ const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
   { key: "students", label: "Students", icon: Users },
+  { key: "uploads", label: "Uploads", icon: Upload },
   { key: "activities", label: "Activities", icon: ClipboardList },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
-  { key: "settings", label: "Settings", icon: Settings },
 ] as const;
 
 const DEFAULT_SECTION: Section = "home";
@@ -105,10 +117,23 @@ const VALID_SECTIONS: Section[] = [
   "home",
   "classes",
   "students",
+  "uploads",
   "activities",
   "upcoming",
   "settings",
+  "about",
 ];
+
+const SECTION_LABELS: Record<Section, string> = {
+  home: "Home",
+  classes: "Classes",
+  students: "Students",
+  uploads: "Uploads",
+  activities: "Activities",
+  upcoming: "Upcoming",
+  settings: "Settings",
+  about: "About",
+};
 
 const MIN_DASHBOARD_SKELETON_MS = 1000;
 const wait = (duration: number) =>
@@ -171,6 +196,13 @@ export default function TeacherScreen() {
   );
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [enrollmentRequests, setEnrollmentRequests] = useState<
+    EnrollmentRequest[]
+  >([]);
+  const [isLoadingEnrollmentRequests, setIsLoadingEnrollmentRequests] =
+    useState(true);
+  const [reviewingEnrollmentRequestId, setReviewingEnrollmentRequestId] =
+    useState<string | null>(null);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
@@ -196,6 +228,9 @@ export default function TeacherScreen() {
     description: "",
     submissionType: "essay",
     allowResubmission: true,
+    maxScore: 100,
+    programmingLanguage: "JavaScript",
+    starterCode: "",
     attachmentName: "",
     attachmentType: "",
     attachmentSize: 0,
@@ -296,6 +331,24 @@ export default function TeacherScreen() {
     }
   };
 
+  const loadEnrollmentRequests = async () => {
+    setIsLoadingEnrollmentRequests(true);
+
+    try {
+      const payload = await fetchTeacherEnrollmentRequests();
+      setEnrollmentRequests(payload);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load enrollment requests.";
+      toast.error(message);
+      setEnrollmentRequests([]);
+    } finally {
+      setIsLoadingEnrollmentRequests(false);
+    }
+  };
+
   const handleMarkNotificationRead = async (notificationId: string) => {
     setNotifications((current) =>
       current.map((notification) =>
@@ -335,6 +388,19 @@ export default function TeacherScreen() {
     }
   };
 
+  const handleOpenNotification = (notification: ActivityNotification) => {
+    setNotificationsOpen(false);
+
+    if (notification.relatedSubmissionId) {
+      navigate(`/teacher/submissions/${notification.relatedSubmissionId}`);
+      return;
+    }
+
+    if (notification.activityId) {
+      navigate(`/teacher/activities/${notification.activityId}`);
+    }
+  };
+
   const loadClassManagerData = async (classId: string) => {
     setIsLoadingClassManager(true);
 
@@ -367,6 +433,7 @@ export default function TeacherScreen() {
         await Promise.all([
           loadTeacherOverview(),
           loadTeacherAnalytics(),
+          loadEnrollmentRequests(),
           loadNotifications(),
           wait(MIN_DASHBOARD_SKELETON_MS),
         ]);
@@ -389,6 +456,7 @@ export default function TeacherScreen() {
       void Promise.all([
         loadTeacherOverview(),
         loadTeacherAnalytics(),
+        loadEnrollmentRequests(),
         loadNotifications(),
       ]);
     };
@@ -481,6 +549,9 @@ export default function TeacherScreen() {
       description: "",
       submissionType: "essay",
       allowResubmission: true,
+      maxScore: 100,
+      programmingLanguage: "JavaScript",
+      starterCode: "",
       attachmentName: "",
       attachmentType: "",
       attachmentSize: 0,
@@ -598,6 +669,15 @@ export default function TeacherScreen() {
         description: activityForm.description.trim(),
         submissionType: activityForm.submissionType,
         allowResubmission: activityForm.allowResubmission,
+        maxScore: activityForm.maxScore,
+        programmingLanguage:
+          activityForm.submissionType === "code"
+            ? activityForm.programmingLanguage
+            : undefined,
+        starterCode:
+          activityForm.submissionType === "code"
+            ? activityForm.starterCode
+            : undefined,
         attachmentName: activityForm.attachmentName || undefined,
         attachmentType: activityForm.attachmentType || undefined,
         attachmentSize: activityForm.attachmentSize || undefined,
@@ -612,6 +692,9 @@ export default function TeacherScreen() {
         description: "",
         submissionType: "essay",
         allowResubmission: true,
+        maxScore: 100,
+        programmingLanguage: "JavaScript",
+        starterCode: "",
         attachmentName: "",
         attachmentType: "",
         attachmentSize: 0,
@@ -704,6 +787,61 @@ export default function TeacherScreen() {
     }
   };
 
+  const handleAcceptEnrollmentRequest = async (request: EnrollmentRequest) => {
+    if (!online) {
+      toast.error("Internet access is required to review enrollment requests.");
+      return;
+    }
+
+    setReviewingEnrollmentRequestId(request.id);
+
+    try {
+      await reviewEnrollmentRequest(request.id, "accepted");
+      toast.success(`${request.studentName ?? "Student"} is now enrolled.`);
+      await Promise.all([
+        loadEnrollmentRequests(),
+        loadTeacherOverview(),
+        managedClass?.id === request.classId
+          ? loadClassManagerData(request.classId)
+          : Promise.resolve(),
+      ]);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to accept enrollment request.";
+      toast.error(message);
+    } finally {
+      setReviewingEnrollmentRequestId(null);
+    }
+  };
+
+  const handleRejectEnrollmentRequest = async (
+    request: EnrollmentRequest,
+    rejectionNote?: string,
+  ) => {
+    if (!online) {
+      toast.error("Internet access is required to review enrollment requests.");
+      return;
+    }
+
+    setReviewingEnrollmentRequestId(request.id);
+
+    try {
+      await reviewEnrollmentRequest(request.id, "rejected", rejectionNote);
+      toast.success("Enrollment request rejected.");
+      await loadEnrollmentRequests();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to reject enrollment request.";
+      toast.error(message);
+    } finally {
+      setReviewingEnrollmentRequestId(null);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -742,6 +880,8 @@ export default function TeacherScreen() {
     >
       <TeacherSidebar
         items={[...SIDEBAR_ITEMS]}
+        footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
+        footerLabel={SUPPORT_SIDEBAR_LABEL}
         activeSection={activeSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(selectedSection) => goToSection(selectedSection)}
@@ -761,7 +901,7 @@ export default function TeacherScreen() {
             <AppLogo variant="icon" iconClassName="hidden h-10 w-10 rounded-xl sm:grid" />
             <div className="min-w-0">
               <p className="text-xs theme-muted">
-                Teacher Panel - {activeSection}
+                Teacher Panel - {SECTION_LABELS[activeSection]}
               </p>
               <p className="truncate text-base font-semibold text-[var(--app-text)] sm:text-lg">
                 {welcomeGreeting}, {teacherName}
@@ -784,6 +924,7 @@ export default function TeacherScreen() {
               onDelete={(notificationId) =>
                 void handleDeleteNotification(notificationId)
               }
+              onNotificationClick={handleOpenNotification}
             />
             <Avatar className="h-9 w-9 border theme-border">
               {user?.profileImageUrl ? (
@@ -839,6 +980,19 @@ export default function TeacherScreen() {
             />
           )}
 
+          {activeSection === "uploads" && (
+            <TeacherUploadsSection
+              requests={enrollmentRequests}
+              isLoading={isLoadingEnrollmentRequests}
+              reviewingId={reviewingEnrollmentRequestId}
+              onRefresh={() => void loadEnrollmentRequests()}
+              onAccept={(request) => void handleAcceptEnrollmentRequest(request)}
+              onReject={(request, rejectionNote) =>
+                void handleRejectEnrollmentRequest(request, rejectionNote)
+              }
+            />
+          )}
+
           {activeSection === "activities" && (
             <TeacherActivitiesSection
               activities={overviewActivities}
@@ -857,6 +1011,7 @@ export default function TeacherScreen() {
           )}
 
           {activeSection === "settings" && renderSettings()}
+          {activeSection === "about" && <AboutTrueSightPage />}
         </div>
       </main>
 

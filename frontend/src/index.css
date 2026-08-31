@@ -226,6 +226,22 @@ select {
   animation: truesight-pulse 1.4s ease-in-out infinite;
 }
 
+.notification-popover {
+  animation: notification-popover-in 160ms ease-out;
+  transform-origin: top right;
+}
+
+@keyframes notification-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .skeleton-shimmer {
   position: relative;
   overflow: hidden;

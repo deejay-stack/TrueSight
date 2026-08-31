@@ -35,7 +35,42 @@ export type EnrolledClass = Omit<
   teacherProfileImageUrl: string | null;
 };
 
-export type ActivitySubmissionType = "essay" | "file" | "image";
+export type EnrollmentRequestStatus = "pending" | "accepted" | "rejected";
+
+export type EnrollmentRequest = {
+  id: string;
+  classId: string;
+  studentId: string;
+  status: EnrollmentRequestStatus;
+  className: string;
+  classCode: string;
+  teacherName: string | null;
+  teacherProfileImageUrl: string | null;
+  studentName: string | null;
+  studentEmail: string | null;
+  studentProfileImageUrl: string | null;
+  corFileName: string;
+  corFileType: string | null;
+  corFileSize: number | null;
+  corDataUrl: string | null;
+  rejectionNote: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+};
+
+export type ClassJoinLookup = {
+  classroom: TeacherClass;
+  enrollment: { id: string; joinedAt: string } | null;
+  request: {
+    id: string;
+    status: EnrollmentRequestStatus;
+    rejectionNote: string | null;
+    submittedAt: string;
+    reviewedAt: string | null;
+  } | null;
+};
+
+export type ActivitySubmissionType = "essay" | "file" | "image" | "code";
 
 export type ActivityNotificationType =
   | "new_activity"
@@ -111,6 +146,11 @@ export type StudentActivitySubmission = {
   fileType: string | null;
   fileSize: number | null;
   submittedVersion: number;
+  teacherComments: string | null;
+  teacherRemarks: string | null;
+  teacherGrade: string | null;
+  teacherScore: number | null;
+  evaluatedAt: string | null;
 };
 
 export type ActivityAttachment = {
@@ -130,6 +170,9 @@ export type ClassActivity = {
   description: string;
   submissionType: ActivitySubmissionType;
   allowResubmission: boolean;
+  maxScore: number;
+  programmingLanguage: string | null;
+  starterCode: string | null;
   attachment: ActivityAttachment | null;
   teacherName: string | null;
   teacherProfileImageUrl: string | null;
@@ -187,6 +230,9 @@ export type TeacherOverviewActivity = {
   instructor: string;
   description: string;
   submissionType: ActivitySubmissionType;
+  maxScore: number;
+  programmingLanguage: string | null;
+  starterCode: string | null;
   dueDate: string;
   createdAt: string;
   submissionCount: number;
@@ -235,6 +281,9 @@ export type ClassSubmission = {
   className: string | null;
   activityTitle: string;
   submissionType: ActivitySubmissionType;
+  maxScore: number;
+  programmingLanguage: string | null;
+  starterCode: string | null;
   dueDate: string;
   studentId: string;
   studentName: string;
@@ -251,8 +300,21 @@ export type ClassSubmission = {
   isAIGenerated: boolean | null;
   analysisDetails: SubmissionAnalysisDetails | null;
   submittedVersion: number;
+  teacherComments: string | null;
+  teacherRemarks: string | null;
+  teacherGrade: string | null;
+  teacherScore: number | null;
+  evaluatedAt: string | null;
   submittedAt: string;
   updatedAt: string;
+};
+
+export type SubmissionEvaluation = {
+  comments: string | null;
+  remarks: string | null;
+  grade: string | null;
+  score: number | null;
+  evaluatedAt: string | null;
 };
 
 export type DocumentPreviewType = "activity-attachment" | "submission";
@@ -300,6 +362,29 @@ type ApiClass = {
   teacher_profile_image_url?: string | null;
 };
 
+type ApiEnrollmentStatus = "pending" | "accepted" | "rejected";
+
+type ApiEnrollmentRequest = {
+  id: number;
+  class_id: number;
+  student_id: number;
+  status: ApiEnrollmentStatus;
+  class_name?: string;
+  class_code?: string;
+  teacher_name?: string | null;
+  teacher_profile_image_url?: string | null;
+  student_name?: string | null;
+  student_email?: string | null;
+  student_profile_image_url?: string | null;
+  cor_file_name?: string | null;
+  cor_file_type?: string | null;
+  cor_file_size?: number | string | null;
+  cor_data_url?: string | null;
+  rejection_note?: string | null;
+  submitted_at: string;
+  reviewed_at?: string | null;
+};
+
 type ApiActivity = {
   id: number;
   class_id: number;
@@ -310,6 +395,9 @@ type ApiActivity = {
   description: string;
   submission_type: ActivitySubmissionType;
   allow_resubmission?: boolean;
+  max_score?: number | string | null;
+  programming_language?: string | null;
+  starter_code?: string | null;
   attachment_name?: string | null;
   attachment_type?: string | null;
   attachment_size?: number | string | null;
@@ -330,6 +418,11 @@ type ApiActivity = {
   file_type?: string | null;
   file_size?: number | string | null;
   submitted_version?: number | string | null;
+  teacher_comments?: string | null;
+  teacher_remarks?: string | null;
+  teacher_grade?: string | null;
+  teacher_score?: number | string | null;
+  evaluated_at?: string | null;
 };
 
 type ApiStudent = {
@@ -360,6 +453,9 @@ type ApiTeacherOverviewActivity = {
   instructor: string;
   description: string;
   submission_type: ActivitySubmissionType;
+  max_score?: number | string | null;
+  programming_language?: string | null;
+  starter_code?: string | null;
   due_date: string;
   created_at: string;
   submission_count: number;
@@ -386,6 +482,14 @@ type ApiSubmission = {
   is_ai_generated: boolean | null;
   analysis_details: SubmissionAnalysisDetails | null;
   submitted_version?: number | string | null;
+  max_score?: number | string | null;
+  programming_language?: string | null;
+  starter_code?: string | null;
+  teacher_comments?: string | null;
+  teacher_remarks?: string | null;
+  teacher_grade?: string | null;
+  teacher_score?: number | string | null;
+  evaluated_at?: string | null;
   submitted_at: string;
   updated_at: string;
 };
@@ -621,6 +725,37 @@ const mapEnrolledClass = (item: ApiClass): EnrolledClass => ({
   teacherProfileImageUrl: item.teacher_profile_image_url ?? null,
 });
 
+const mapEnrollmentStatus = (status: string): EnrollmentRequestStatus => {
+  if (status === "accepted" || status === "rejected") {
+    return status;
+  }
+
+  return "pending";
+};
+
+const mapEnrollmentRequest = (
+  item: ApiEnrollmentRequest,
+): EnrollmentRequest => ({
+  id: String(item.id),
+  classId: String(item.class_id),
+  studentId: String(item.student_id),
+  status: mapEnrollmentStatus(item.status),
+  className: item.class_name ?? "Unknown Class",
+  classCode: item.class_code ?? "",
+  teacherName: item.teacher_name ?? null,
+  teacherProfileImageUrl: item.teacher_profile_image_url ?? null,
+  studentName: item.student_name ?? null,
+  studentEmail: item.student_email ?? null,
+  studentProfileImageUrl: item.student_profile_image_url ?? null,
+  corFileName: item.cor_file_name ?? "Certificate of Registration",
+  corFileType: item.cor_file_type ?? null,
+  corFileSize: asNumber(item.cor_file_size),
+  corDataUrl: item.cor_data_url ?? null,
+  rejectionNote: item.rejection_note ?? null,
+  submittedAt: item.submitted_at,
+  reviewedAt: item.reviewed_at ?? null,
+});
+
 const asNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -665,6 +800,11 @@ const mapStudentSubmission = (item: ApiActivity): StudentActivitySubmission | nu
     fileType: item.file_type ?? null,
     fileSize: asNumber(item.file_size),
     submittedVersion: asNumber(item.submitted_version) ?? 1,
+    teacherComments: item.teacher_comments ?? null,
+    teacherRemarks: item.teacher_remarks ?? null,
+    teacherGrade: item.teacher_grade ?? null,
+    teacherScore: asNumber(item.teacher_score),
+    evaluatedAt: item.evaluated_at ?? null,
   };
 };
 
@@ -678,6 +818,9 @@ const mapActivity = (item: ApiActivity): ClassActivity => ({
   description: item.description,
   submissionType: item.submission_type,
   allowResubmission: item.allow_resubmission !== false,
+  maxScore: asNumber(item.max_score) ?? 100,
+  programmingLanguage: item.programming_language ?? null,
+  starterCode: item.starter_code ?? null,
   attachment: item.attachment_name
     ? {
         fileName: item.attachment_name,
@@ -740,6 +883,9 @@ const mapTeacherOverviewActivity = (
   instructor: item.instructor,
   description: item.description,
   submissionType: item.submission_type,
+  maxScore: asNumber(item.max_score) ?? 100,
+  programmingLanguage: item.programming_language ?? null,
+  starterCode: item.starter_code ?? null,
   dueDate: item.due_date,
   createdAt: item.created_at,
   submissionCount: Number(item.submission_count ?? 0),
@@ -817,6 +963,14 @@ const mapSubmission = (item: ApiSubmission): ClassSubmission => {
       typeof item.is_ai_generated === "boolean" ? item.is_ai_generated : null,
     analysisDetails,
     submittedVersion: asNumber(item.submitted_version) ?? 1,
+    maxScore: asNumber(item.max_score) ?? 100,
+    programmingLanguage: item.programming_language ?? null,
+    starterCode: item.starter_code ?? null,
+    teacherComments: item.teacher_comments ?? null,
+    teacherRemarks: item.teacher_remarks ?? null,
+    teacherGrade: item.teacher_grade ?? null,
+    teacherScore: asNumber(item.teacher_score),
+    evaluatedAt: item.evaluated_at ?? null,
     submittedAt: item.submitted_at,
     updatedAt: item.updated_at,
   };
@@ -897,13 +1051,89 @@ export async function createTeacherClass(input: {
   return mapTeacherClass(payload.class);
 }
 
-export async function joinClassByCode(code: string): Promise<EnrolledClass> {
-  const payload = await request<{ class: ApiClass }>("/join", {
+export async function lookupClassByCode(code: string): Promise<ClassJoinLookup> {
+  const payload = await request<{
+    class: ApiClass;
+    enrollment: { id: number; joined_at: string } | null;
+    request: {
+      id: number;
+      status: string;
+      rejection_note?: string | null;
+      submitted_at: string;
+      reviewed_at?: string | null;
+    } | null;
+  }>("/join/lookup", {
     method: "POST",
     body: { code },
   });
 
-  return mapEnrolledClass(payload.class);
+  return {
+    classroom: mapTeacherClass(payload.class),
+    enrollment: payload.enrollment
+      ? {
+          id: String(payload.enrollment.id),
+          joinedAt: payload.enrollment.joined_at,
+        }
+      : null,
+    request: payload.request
+      ? {
+          id: String(payload.request.id),
+          status: mapEnrollmentStatus(payload.request.status),
+          rejectionNote: payload.request.rejection_note ?? null,
+          submittedAt: payload.request.submitted_at,
+          reviewedAt: payload.request.reviewed_at ?? null,
+        }
+      : null,
+  };
+}
+
+export async function submitEnrollmentRequest(input: {
+  code: string;
+  corFileName: string;
+  corFileType: string;
+  corFileSize: number;
+  corDataUrl: string;
+}): Promise<EnrollmentRequest> {
+  const payload = await request<{
+    request: ApiEnrollmentRequest;
+  }>("/join", {
+    method: "POST",
+    body: input,
+  });
+
+  return mapEnrollmentRequest(payload.request);
+}
+
+export async function fetchMyEnrollmentRequests(): Promise<EnrollmentRequest[]> {
+  const payload = await request<{ requests: ApiEnrollmentRequest[] }>(
+    "/enrollment-requests/mine",
+  );
+  return (payload.requests ?? []).map(mapEnrollmentRequest);
+}
+
+export async function fetchTeacherEnrollmentRequests(): Promise<
+  EnrollmentRequest[]
+> {
+  const payload = await request<{ requests: ApiEnrollmentRequest[] }>(
+    "/enrollment-requests",
+  );
+  return (payload.requests ?? []).map(mapEnrollmentRequest);
+}
+
+export async function reviewEnrollmentRequest(
+  requestId: string,
+  status: Exclude<EnrollmentRequestStatus, "pending">,
+  rejectionNote?: string,
+): Promise<EnrollmentRequest> {
+  const payload = await request<{ request: ApiEnrollmentRequest }>(
+    `/enrollment-requests/${requestId}`,
+    {
+      method: "PATCH",
+      body: { status, rejectionNote },
+    },
+  );
+
+  return mapEnrollmentRequest(payload.request);
 }
 
 export async function fetchEnrolledClasses(): Promise<EnrolledClass[]> {
@@ -934,6 +1164,11 @@ export async function fetchActivityDetail(activityId: string): Promise<ActivityD
       file_type?: string | null;
       file_size?: number | string | null;
       submitted_version?: number | string | null;
+      teacher_comments?: string | null;
+      teacher_remarks?: string | null;
+      teacher_grade?: string | null;
+      teacher_score?: number | string | null;
+      evaluated_at?: string | null;
     } | null;
     history: ApiSubmissionHistory[];
   }>(`/activities/${activityId}`);
@@ -952,6 +1187,11 @@ export async function fetchActivityDetail(activityId: string): Promise<ActivityD
     file_type: payload.submission?.file_type ?? null,
     file_size: payload.submission?.file_size ?? null,
     submitted_version: payload.submission?.submitted_version ?? null,
+    teacher_comments: payload.submission?.teacher_comments ?? null,
+    teacher_remarks: payload.submission?.teacher_remarks ?? null,
+    teacher_grade: payload.submission?.teacher_grade ?? null,
+    teacher_score: payload.submission?.teacher_score ?? null,
+    evaluated_at: payload.submission?.evaluated_at ?? null,
   });
 
   return {
@@ -969,6 +1209,9 @@ export async function createClassActivity(
     description: string;
     submissionType: ActivitySubmissionType;
     allowResubmission?: boolean;
+    maxScore?: number;
+    programmingLanguage?: string;
+    starterCode?: string;
     attachmentName?: string;
     attachmentType?: string;
     attachmentSize?: number;
@@ -1014,6 +1257,11 @@ export async function submitActivitySubmission(
           file_type?: string | null;
           file_size?: number | string | null;
           submitted_version?: number | string | null;
+          teacher_comments?: string | null;
+          teacher_remarks?: string | null;
+          teacher_grade?: string | null;
+          teacher_score?: number | string | null;
+          evaluated_at?: string | null;
         };
       }>(path, input, options.onUploadProgress)
     : await request<{
@@ -1030,6 +1278,11 @@ export async function submitActivitySubmission(
       file_type?: string | null;
       file_size?: number | string | null;
       submitted_version?: number | string | null;
+      teacher_comments?: string | null;
+      teacher_remarks?: string | null;
+      teacher_grade?: string | null;
+      teacher_score?: number | string | null;
+      evaluated_at?: string | null;
     };
   }>(path, {
     method: "POST",
@@ -1054,6 +1307,11 @@ export async function submitActivitySubmission(
     fileType: payload.submission.file_type ?? null,
     fileSize: asNumber(payload.submission.file_size),
     submittedVersion: asNumber(payload.submission.submitted_version) ?? 1,
+    teacherComments: payload.submission.teacher_comments ?? null,
+    teacherRemarks: payload.submission.teacher_remarks ?? null,
+    teacherGrade: payload.submission.teacher_grade ?? null,
+    teacherScore: asNumber(payload.submission.teacher_score),
+    evaluatedAt: payload.submission.evaluated_at ?? null,
   };
 }
 
@@ -1085,6 +1343,37 @@ export async function fetchSubmissionDetail(
   );
 
   return mapSubmission(payload.submission);
+}
+
+export async function saveSubmissionEvaluation(
+  submissionId: string,
+  input: {
+    comments?: string;
+    remarks?: string;
+    grade?: string;
+    score?: number | null;
+  },
+): Promise<SubmissionEvaluation> {
+  const payload = await request<{
+    submission: {
+      teacher_comments?: string | null;
+      teacher_remarks?: string | null;
+      teacher_grade?: string | null;
+      teacher_score?: number | string | null;
+      evaluated_at?: string | null;
+    };
+  }>(`/submissions/${submissionId}/evaluation`, {
+    method: "PATCH",
+    body: input,
+  });
+
+  return {
+    comments: payload.submission.teacher_comments ?? null,
+    remarks: payload.submission.teacher_remarks ?? null,
+    grade: payload.submission.teacher_grade ?? null,
+    score: asNumber(payload.submission.teacher_score),
+    evaluatedAt: payload.submission.evaluated_at ?? null,
+  };
 }
 
 export async function fetchDocumentPreview(

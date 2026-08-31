@@ -10,6 +10,7 @@ type TeacherActivitiesSectionProps = {
 };
 
 const getSubmissionTypeLabel = (type: string) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Image";
   if (type === "file") return "File";
   return "Essay";
@@ -74,6 +75,11 @@ export function TeacherActivitiesSection({
                       <span className="rounded-full bg-[color-mix(in_srgb,var(--app-accent)_16%,transparent)] px-2 py-1 text-[var(--app-accent)]">
                         {getSubmissionTypeLabel(activity.submissionType)}
                       </span>
+                      <span>{activity.maxScore} pts</span>
+                      {activity.submissionType === "code" &&
+                        activity.programmingLanguage && (
+                          <span>{activity.programmingLanguage}</span>
+                        )}
                       <span>{activity.submissionCount} submissions</span>
                       <span>Instructor: {activity.instructor}</span>
                     </div>

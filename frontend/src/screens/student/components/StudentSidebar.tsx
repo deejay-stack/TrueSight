@@ -6,7 +6,7 @@ import { AppLogo } from "../../../components/AppLogo";
 import { LogoutConfirmationDialog } from "../../../components/LogoutConfirmationDialog";
 import type { EnrolledClass } from "../services/studentClassroomService";
 
-export type StudentSection = "home" | "enrolled" | "settings";
+export type StudentSection = "home" | "enrolled" | "settings" | "about";
 
 export type StudentSidebarItem = {
   key: StudentSection;
@@ -16,6 +16,8 @@ export type StudentSidebarItem = {
 
 type StudentSidebarProps = {
   items: StudentSidebarItem[];
+  footerItems?: StudentSidebarItem[];
+  footerLabel?: string;
   activeSection: StudentSection;
   mobileOpen: boolean;
   enrolledClasses: EnrolledClass[];
@@ -23,7 +25,7 @@ type StudentSidebarProps = {
   onSelectSection: (section: StudentSection) => void;
   onSelectClass: (classId: string) => void;
   onCloseMobile: () => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 };
 
 function SidebarNav({
@@ -31,14 +33,16 @@ function SidebarNav({
   activeSection,
   expanded,
   onSelect,
+  className = "mt-4 space-y-1.5",
 }: {
   items: StudentSidebarItem[];
   activeSection: StudentSection;
   expanded: boolean;
   onSelect: (section: StudentSection) => void;
+  className?: string;
 }) {
   return (
-    <div className="mt-4 space-y-1.5">
+    <div className={className}>
       {items.map((item) => {
         const Icon = item.icon;
         const active = item.key === activeSection;
@@ -128,6 +132,8 @@ function EnrolledClassList({
 
 export function StudentSidebar({
   items,
+  footerItems = [],
+  footerLabel,
   activeSection,
   mobileOpen,
   enrolledClasses,
@@ -177,6 +183,28 @@ export function StudentSidebar({
         />
 
         <div className="mt-auto border-t theme-border pt-4">
+          {footerItems.length > 0 && (
+            <div className="mb-4">
+              {footerLabel && (
+                <p
+                  className={[
+                    "mb-2 overflow-hidden whitespace-nowrap px-3 text-xs font-semibold uppercase tracking-wide theme-muted transition-all duration-200",
+                    hovered ? "max-w-[180px] opacity-100" : "max-w-0 opacity-0",
+                  ].join(" ")}
+                >
+                  {footerLabel}
+                </p>
+              )}
+              <SidebarNav
+                items={footerItems}
+                activeSection={activeSection}
+                expanded={hovered}
+                onSelect={onSelectSection}
+                className="space-y-1.5"
+              />
+            </div>
+          )}
+
           <LogoutConfirmationDialog onConfirm={onLogout}>
             <button className="theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-rose-400 transition-all duration-200 hover:bg-rose-500/10">
               <LogOut className="h-4 w-4 shrink-0" />
@@ -208,7 +236,7 @@ export function StudentSidebar({
               animate={{ x: 0 }}
               exit={{ x: -300 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              className="theme-surface fixed left-0 top-0 z-50 h-screen w-72 px-4 py-4 md:hidden"
+              className="theme-surface fixed left-0 top-0 z-50 flex h-screen w-72 flex-col px-4 py-4 md:hidden"
             >
               <div className="flex items-center justify-between">
                 <AppLogo iconClassName="h-11 w-11 rounded-2xl" />
@@ -241,9 +269,29 @@ export function StudentSidebar({
               />
 
               <div className="mt-auto border-t theme-border pt-4">
+                {footerItems.length > 0 && (
+                  <div className="mb-4">
+                    {footerLabel && (
+                      <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide theme-muted">
+                        {footerLabel}
+                      </p>
+                    )}
+                    <SidebarNav
+                      items={footerItems}
+                      activeSection={activeSection}
+                      expanded={true}
+                      onSelect={(section) => {
+                        onSelectSection(section);
+                        onCloseMobile();
+                      }}
+                      className="space-y-1.5"
+                    />
+                  </div>
+                )}
+
                 <LogoutConfirmationDialog
-                  onConfirm={() => {
-                    onLogout();
+                  onConfirm={async () => {
+                    await onLogout();
                     onCloseMobile();
                   }}
                 >

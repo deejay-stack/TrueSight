@@ -17,6 +17,13 @@ type LogoutConfirmationDialogProps = {
   onConfirm: () => void | Promise<void>;
 };
 
+const MIN_LOGOUT_SPINNER_MS = 2000;
+
+const wait = (duration: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, duration);
+  });
+
 export function LogoutConfirmationDialog({
   children,
   onConfirm,
@@ -29,6 +36,7 @@ export function LogoutConfirmationDialog({
 
     setConfirming(true);
     try {
+      await wait(MIN_LOGOUT_SPINNER_MS);
       await onConfirm();
       setOpen(false);
     } finally {
@@ -72,7 +80,7 @@ export function LogoutConfirmationDialog({
             ) : (
               <LogOut className="mr-2 h-4 w-4" />
             )}
-            Yes, Logout
+            {confirming ? "Logging out..." : "Yes, Logout"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

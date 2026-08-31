@@ -9,9 +9,11 @@ export type TeacherSection =
   | "home"
   | "classes"
   | "students"
+  | "uploads"
   | "activities"
   | "upcoming"
-  | "settings";
+  | "settings"
+  | "about";
 
 export type TeacherSidebarItem = {
   key: TeacherSection;
@@ -21,11 +23,13 @@ export type TeacherSidebarItem = {
 
 type TeacherSidebarProps = {
   items: TeacherSidebarItem[];
+  footerItems?: TeacherSidebarItem[];
+  footerLabel?: string;
   activeSection: TeacherSection;
   mobileOpen: boolean;
   onSelect: (section: TeacherSection) => void;
   onCloseMobile: () => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 };
 
 function SidebarItems({
@@ -33,14 +37,16 @@ function SidebarItems({
   activeSection,
   expanded,
   onSelect,
+  className = "mt-4 space-y-1.5",
 }: {
   items: TeacherSidebarItem[];
   activeSection: TeacherSection;
   expanded: boolean;
   onSelect: (section: TeacherSection) => void;
+  className?: string;
 }) {
   return (
-    <div className="mt-4 space-y-1.5">
+    <div className={className}>
       {items.map((item) => {
         const Icon = item.icon;
         const active = activeSection === item.key;
@@ -75,6 +81,8 @@ function SidebarItems({
 
 export function TeacherSidebar({
   items,
+  footerItems = [],
+  footerLabel,
   activeSection,
   mobileOpen,
   onSelect,
@@ -114,6 +122,28 @@ export function TeacherSidebar({
         />
 
         <div className="mt-auto border-t theme-border pt-4">
+          {footerItems.length > 0 && (
+            <div className="mb-4">
+              {footerLabel && (
+                <p
+                  className={[
+                    "mb-2 overflow-hidden whitespace-nowrap px-3 text-xs font-semibold uppercase tracking-wide theme-muted transition-all duration-200",
+                    hovered ? "max-w-[180px] opacity-100" : "max-w-0 opacity-0",
+                  ].join(" ")}
+                >
+                  {footerLabel}
+                </p>
+              )}
+              <SidebarItems
+                items={footerItems}
+                activeSection={activeSection}
+                expanded={hovered}
+                onSelect={onSelect}
+                className="space-y-1.5"
+              />
+            </div>
+          )}
+
           <LogoutConfirmationDialog onConfirm={onLogout}>
             <button
               className={[
@@ -151,7 +181,7 @@ export function TeacherSidebar({
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              className="theme-surface fixed left-0 top-0 z-50 h-screen w-72 px-4 py-4 md:hidden"
+              className="theme-surface fixed left-0 top-0 z-50 flex h-screen w-72 flex-col px-4 py-4 md:hidden"
             >
               <div className="flex items-center justify-between">
                 <AppLogo iconClassName="h-11 w-11 rounded-2xl" />
@@ -174,9 +204,29 @@ export function TeacherSidebar({
               />
 
               <div className="mt-auto border-t theme-border pt-4">
+                {footerItems.length > 0 && (
+                  <div className="mb-4">
+                    {footerLabel && (
+                      <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide theme-muted">
+                        {footerLabel}
+                      </p>
+                    )}
+                    <SidebarItems
+                      items={footerItems}
+                      activeSection={activeSection}
+                      expanded={true}
+                      onSelect={(section) => {
+                        onSelect(section);
+                        onCloseMobile();
+                      }}
+                      className="space-y-1.5"
+                    />
+                  </div>
+                )}
+
                 <LogoutConfirmationDialog
-                  onConfirm={() => {
-                    onLogout();
+                  onConfirm={async () => {
+                    await onLogout();
                     onCloseMobile();
                   }}
                 >

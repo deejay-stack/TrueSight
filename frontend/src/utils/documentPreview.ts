@@ -16,7 +16,11 @@ export type PreparedFileUpload = {
   extractedText?: string;
 };
 
-export type UploadPurpose = "activity-attachment" | "file-submission" | "image-submission";
+export type UploadPurpose =
+  | "activity-attachment"
+  | "file-submission"
+  | "image-submission"
+  | "cor-upload";
 
 const DRAFT_PREFIX = "truesight-draft-document:";
 const MAX_PREVIEW_FILE_SIZE = 5 * 1024 * 1024;
@@ -66,7 +70,7 @@ export const isSupportedPreviewFile = (
     return FILE_SUBMISSION_EXTENSIONS.has(extension);
   }
 
-  if (purpose === "image-submission") {
+  if (purpose === "image-submission" || purpose === "cor-upload") {
     return IMAGE_SUBMISSION_EXTENSIONS.has(extension);
   }
 
@@ -80,6 +84,10 @@ export const validatePreviewFile = (
   if (!isSupportedPreviewFile(file, purpose)) {
     if (purpose === "file-submission") {
       return "File activities only accept PDF or DOCX documents.";
+    }
+
+    if (purpose === "cor-upload") {
+      return "COR uploads only accept PNG, JPG, JPEG, or WEBP images.";
     }
 
     if (purpose === "image-submission") {

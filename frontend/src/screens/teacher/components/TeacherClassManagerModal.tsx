@@ -1,6 +1,7 @@
 ﻿import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarClock,
+  Code2,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -26,6 +27,9 @@ type ActivityFormState = {
   description: string;
   submissionType: ActivitySubmissionType;
   allowResubmission: boolean;
+  maxScore: number;
+  programmingLanguage: string;
+  starterCode: string;
   attachmentName: string;
   attachmentType: string;
   attachmentSize: number;
@@ -62,10 +66,27 @@ type TeacherClassManagerModalProps = {
 };
 
 const getSubmissionTypeLabel = (type: ActivitySubmissionType) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Images";
   if (type === "file") return "Files";
   return "Essays";
 };
+
+const PROGRAMMING_LANGUAGES = [
+  "JavaScript",
+  "TypeScript",
+  "Python",
+  "Java",
+  "C",
+  "C++",
+  "C#",
+  "PHP",
+  "Dart",
+  "HTML",
+  "CSS",
+  "SQL",
+  "Other",
+];
 
 const getDisplayPrediction = (submission: ClassSubmission) => {
   const prediction =
@@ -260,6 +281,7 @@ export function TeacherClassManagerModal({
                             <option value="essay">Essays</option>
                             <option value="file">Files</option>
                             <option value="image">Images</option>
+                            <option value="code">Code</option>
                           </select>
                           <Input
                             type="datetime-local"
@@ -269,6 +291,71 @@ export function TeacherClassManagerModal({
                             className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
                           />
                         </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                              Points
+                            </label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={10000}
+                              step="0.01"
+                              value={activityForm.maxScore}
+                              onChange={(event) =>
+                                onChangeActivityForm({
+                                  maxScore: Number(event.target.value) || 0,
+                                })
+                              }
+                              className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
+                            />
+                          </div>
+
+                          {activityForm.submissionType === "code" && (
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
+                                Programming Language
+                              </label>
+                              <select
+                                value={activityForm.programmingLanguage}
+                                onChange={(event) =>
+                                  onChangeActivityForm({
+                                    programmingLanguage: event.target.value,
+                                  })
+                                }
+                                className="theme-ring h-10 w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 text-sm text-[var(--app-text)]"
+                              >
+                                {PROGRAMMING_LANGUAGES.map((language) => (
+                                  <option key={language} value={language}>
+                                    {language}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        {activityForm.submissionType === "code" && (
+                          <div className="space-y-1.5">
+                            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide theme-muted">
+                              <Code2 className="h-3.5 w-3.5" />
+                              Starter Code
+                            </label>
+                            <textarea
+                              value={activityForm.starterCode}
+                              onChange={(event) =>
+                                onChangeActivityForm({
+                                  starterCode: event.target.value,
+                                })
+                              }
+                              rows={6}
+                              spellCheck={false}
+                              placeholder="Optional starter code"
+                              className="theme-ring w-full overflow-x-auto rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]"
+                            />
+                          </div>
+                        )}
 
                         <label className="flex items-center gap-3 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] px-3 py-2 text-sm text-[var(--app-text)]">
                           <input
@@ -391,6 +478,11 @@ export function TeacherClassManagerModal({
                                   <span className="rounded-full bg-[color-mix(in_srgb,var(--app-accent)_16%,transparent)] px-2 py-1 text-[var(--app-accent)]">
                                     {getSubmissionTypeLabel(activity.submissionType)}
                                   </span>
+                                  <span>{activity.maxScore} pts</span>
+                                  {activity.submissionType === "code" &&
+                                    activity.programmingLanguage && (
+                                      <span>{activity.programmingLanguage}</span>
+                                    )}
                                   <span>{activity.submissionCount} submissions</span>
                                   {focused && (
                                     <span className="font-semibold text-[var(--app-accent)]">

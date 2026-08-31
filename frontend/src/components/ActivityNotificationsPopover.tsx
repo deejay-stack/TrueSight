@@ -86,7 +86,7 @@ export function ActivityNotificationsPopover({
     <div className="relative" ref={containerRef}>
       <button
         onClick={onToggle}
-        className="theme-ring inline-flex h-10 w-10 items-center justify-center rounded-xl border theme-border text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)]"
+        className="theme-ring inline-flex h-10 w-10 items-center justify-center rounded-xl border theme-border text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] active:scale-90"
       >
         <Bell className="h-5 w-5" />
       </button>
@@ -97,7 +97,7 @@ export function ActivityNotificationsPopover({
       )}
 
       {open && (
-        <div className="theme-surface absolute right-0 z-50 mt-2 w-[min(92vw,360px)] rounded-2xl p-3 shadow-[var(--app-shadow)]">
+        <div className="theme-surface notification-popover !fixed inset-x-3 top-20 z-50 w-auto rounded-2xl p-3 shadow-[var(--app-shadow)] sm:!absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[min(92vw,360px)]">
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-[var(--app-text)]">Notifications</p>
@@ -123,7 +123,7 @@ export function ActivityNotificationsPopover({
               No notifications yet.
             </p>
           ) : (
-            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[calc(100vh-12rem)] space-y-2 overflow-y-auto pr-1 sm:max-h-80">
               {notifications.map((notification) => {
                 const clickable = Boolean(onNotificationClick && notification.activityId);
 

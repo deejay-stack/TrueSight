@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock3,
+  Code2,
   FileText,
   History,
   Send,
@@ -42,6 +43,7 @@ const getDueState = (dueDate: string, submitted: boolean) => {
 };
 
 const getSubmissionTypeLabel = (type: string) => {
+  if (type === "code") return "Code";
   if (type === "image") return "Image";
   if (type === "file") return "File";
   return "Essay";
@@ -187,6 +189,18 @@ export default function StudentActivityDetailsPage() {
                     </p>
                   </div>
                 </div>
+
+                <div className="flex flex-wrap gap-2 text-xs theme-muted">
+                  <span className="rounded-full border theme-border px-3 py-1">
+                    {activity.maxScore} pts
+                  </span>
+                  {activity.submissionType === "code" &&
+                    activity.programmingLanguage && (
+                      <span className="rounded-full border theme-border px-3 py-1">
+                        {activity.programmingLanguage}
+                      </span>
+                    )}
+                </div>
               </CardContent>
             </Card>
 
@@ -200,6 +214,17 @@ export default function StudentActivityDetailsPage() {
                     <p className="whitespace-pre-wrap text-sm leading-6 theme-muted">
                       {activity.description}
                     </p>
+                    {activity.submissionType === "code" && activity.starterCode && (
+                      <div className="mt-4 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
+                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
+                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
+                          Starter Code
+                        </div>
+                        <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg bg-[color-mix(in_srgb,var(--app-bg)_72%,black)] p-3 font-mono text-xs leading-5 text-[var(--app-text)]">
+                          {activity.starterCode}
+                        </pre>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -326,6 +351,77 @@ export default function StudentActivityDetailsPage() {
                     </Button>
                   </CardContent>
                 </Card>
+
+                {submission && (
+                  <Card className="theme-card">
+                    <CardContent className="space-y-3 p-5">
+                      <h2 className="text-lg font-semibold text-[var(--app-text)]">
+                        AI Detection Result
+                      </h2>
+                      <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3 text-sm">
+                        <p className="font-medium text-[var(--app-text)]">
+                          {typeof submission.aiProbability === "number"
+                            ? `${submission.aiProbability.toFixed(2)}% probability of AI-generated content`
+                            : "Not analyzed yet"}
+                        </p>
+                        {typeof submission.confidenceScore === "number" && (
+                          <p className="mt-1 theme-muted">
+                            Confidence: {submission.confidenceScore.toFixed(2)}%
+                          </p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {submission && (
+                  <Card className="theme-card">
+                    <CardContent className="space-y-3 p-5">
+                      <h2 className="text-lg font-semibold text-[var(--app-text)]">
+                        Teacher Evaluation
+                      </h2>
+                      {submission.evaluatedAt ? (
+                        <div className="space-y-3 text-sm">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
+                              <p className="text-xs theme-muted">Score</p>
+                              <p className="font-semibold text-[var(--app-text)]">
+                                {submission.teacherScore !== null
+                                  ? `${submission.teacherScore}/${activity.maxScore}`
+                                  : "Not scored"}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
+                              <p className="text-xs theme-muted">Grade</p>
+                              <p className="font-semibold text-[var(--app-text)]">
+                                {submission.teacherGrade ?? "Not set"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
+                            <p className="text-xs theme-muted">Remarks</p>
+                            <p className="font-semibold text-[var(--app-text)]">
+                              {submission.teacherRemarks ?? "No remarks"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
+                            <p className="text-xs theme-muted">Teacher Comments</p>
+                            <p className="mt-1 whitespace-pre-wrap text-[var(--app-text)]">
+                              {submission.teacherComments ?? "No comments"}
+                            </p>
+                            <p className="mt-3 text-xs theme-muted">
+                              Reviewed {formatDateTime(submission.evaluatedAt)}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm theme-muted">
+                          No teacher evaluation has been saved yet.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </motion.div>
