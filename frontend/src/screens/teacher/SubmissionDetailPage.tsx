@@ -4,11 +4,14 @@ import {
   ArrowLeft,
   BookOpen,
   CalendarClock,
+  Code2,
   FileText,
   Home,
   Loader2,
   Menu,
+  Play,
   Save,
+  Terminal,
   Upload,
   WandSparkles,
 } from "lucide-react";
@@ -35,6 +38,11 @@ import {
   type TeacherSection,
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
+import { CodeEditor } from "../../components/code/CodeEditor";
+import {
+  getProgrammingLanguageLabel,
+  runCode,
+} from "../../utils/codeRunner";
 import {
   SUPPORT_SIDEBAR_ITEMS,
   SUPPORT_SIDEBAR_LABEL,
@@ -102,6 +110,10 @@ export default function SubmissionDetailPage() {
     score: "",
   });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeOutput, setCodeOutput] = useState("");
+  const [codePreviewHtml, setCodePreviewHtml] = useState("");
+  const [isRunningCode, setIsRunningCode] = useState(false);
 
   const loadSubmission = async () => {
     if (!submissionId) return;
@@ -148,6 +160,9 @@ export default function SubmissionDetailPage() {
       score:
         submission.teacherScore === null ? "" : String(submission.teacherScore),
     });
+    setCodeInput("");
+    setCodeOutput("");
+    setCodePreviewHtml("");
   }, [submission]);
 
   useEffect(() => {
@@ -272,18 +287,52 @@ export default function SubmissionDetailPage() {
     }
   };
 
+  const handleRunCode = async () => {
+    if (
+      !submission ||
+      submission.submissionType !== "code" ||
+      !submission.contentText?.trim() ||
+      isRunningCode
+    ) {
+      return;
+    }
+
+    setIsRunningCode(true);
+    setCodeOutput("Starting runtime...");
+    setCodePreviewHtml("");
+
+    try {
+      const result = await runCode(
+        submission.contentText,
+        submission.programmingLanguage,
+        codeInput,
+      );
+      setCodeOutput(result.output);
+      setCodePreviewHtml(result.previewHtml ?? "");
+    } finally {
+      setIsRunningCode(false);
+    }
+  };
+
   const renderSubmissionContent = () => {
     if (!submission) return null;
 
     if (submission.contentText?.trim()) {
+      if (submission.submissionType === "code") {
+        return (
+          <CodeEditor
+            value={submission.contentText}
+            language={submission.programmingLanguage}
+            readOnly
+            minHeight={460}
+            ariaLabel={`${getProgrammingLanguageLabel(submission.programmingLanguage)} submitted code`}
+          />
+        );
+      }
+
       return (
         <pre
-          className={[
-            "max-h-[360px] overflow-auto rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm text-[var(--app-text)]",
-            submission.submissionType === "code"
-              ? "whitespace-pre font-mono"
-              : "whitespace-pre-wrap",
-          ].join(" ")}
+          className="max-h-[360px] overflow-auto whitespace-pre-wrap rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm text-[var(--app-text)]"
         >
           {submission.contentText}
         </pre>
@@ -475,7 +524,33 @@ export default function SubmissionDetailPage() {
 
             <Card className="theme-card">
               <CardContent className="space-y-3 p-5">
-                <h3 className="text-lg font-semibold text-[var(--app-text)]">Submission Content</h3>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[var(--app-text)]">
+                      Submission Content
+                    </h3>
+                    {submission.submissionType === "code" && (
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs theme-muted">
+                        <Code2 className="h-3.5 w-3.5" />
+                        {getProgrammingLanguageLabel(submission.programmingLanguage)}
+                      </p>
+                    )}
+                  </div>
+                  {submission.submissionType === "code" && (
+                    <Button
+                      size="sm"
+                      onClick={() => void handleRunCode()}
+                      disabled={isRunningCode || !submission.contentText?.trim()}
+                    >
+                      {isRunningCode ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      {isRunningCode ? "Running..." : "Run Code"}
+                    </Button>
+                  )}
+                </div>
                 {submission.fileName && (
                   <button
                     type="button"
@@ -487,6 +562,42 @@ export default function SubmissionDetailPage() {
                   </button>
                 )}
                 {renderSubmissionContent()}
+
+                {submission.submissionType === "code" && (
+                  <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.35fr)_minmax(0,1fr)]">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold uppercase theme-muted">
+                        Standard Input
+                      </label>
+                      <textarea
+                        value={codeInput}
+                        onChange={(event) => setCodeInput(event.target.value)}
+                        rows={5}
+                        spellCheck={false}
+                        placeholder="Optional input, one value or line at a time"
+                        className="theme-ring h-36 w-full resize-none rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]"
+                      />
+                    </div>
+                    <div className="overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,black)]">
+                      <div className="flex h-9 items-center gap-2 border-b theme-border px-3 text-xs font-semibold text-[var(--app-text)]">
+                        <Terminal className="h-4 w-4 text-[var(--app-accent)]" />
+                        Program Output
+                      </div>
+                      <pre className="h-[106px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]">
+                        {codeOutput || "Run the submitted code to inspect its output."}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {submission.submissionType === "code" && codePreviewHtml && (
+                  <iframe
+                    title="Submitted code preview"
+                    sandbox="allow-scripts"
+                    srcDoc={codePreviewHtml}
+                    className="h-80 w-full rounded-lg border theme-border bg-white"
+                  />
+                )}
               </CardContent>
             </Card>
 

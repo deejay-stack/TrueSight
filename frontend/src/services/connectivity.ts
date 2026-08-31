@@ -90,7 +90,7 @@ export const probeBackend = async () => {
   const timeout = window.setTimeout(() => controller.abort(), 4500);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/google/config`, {
+    const response = await fetch(`${API_BASE_URL}/health`, {
       method: "GET",
       credentials: "include",
       cache: "no-store",

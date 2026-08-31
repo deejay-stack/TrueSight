@@ -89,12 +89,23 @@ export function NetworkStatusProvider({ children }: NetworkStatusProviderProps) 
   return (
     <NetworkStatusContext.Provider value={value}>
       {children}
-      {!online && <OfflineBanner checking={status.checking} />}
+      {!online && (
+        <OfflineBanner
+          checking={status.checking}
+          browserOnline={status.browserOnline}
+        />
+      )}
     </NetworkStatusContext.Provider>
   );
 }
 
-function OfflineBanner({ checking }: { checking: boolean }) {
+function OfflineBanner({
+  checking,
+  browserOnline,
+}: {
+  checking: boolean;
+  browserOnline: boolean;
+}) {
   return (
     <div className="fixed inset-x-0 top-0 z-[9999] flex justify-center px-3 pt-3 pointer-events-none">
       <div
@@ -109,10 +120,13 @@ function OfflineBanner({ checking }: { checking: boolean }) {
           )}
         </div>
         <div className="min-w-0">
-          <p className="font-bold">No Internet Connection</p>
+          <p className="font-bold">
+            {browserOnline ? "Server Connection Unavailable" : "No Internet Connection"}
+          </p>
           <p className="mt-0.5 text-xs theme-muted">
-            You are offline. Previously loaded content is available, but some
-            features require an internet connection.
+            {browserOnline
+              ? "Your internet is available, but the application server cannot be reached. Retrying automatically."
+              : "Your device is offline. Previously loaded content remains available."}
           </p>
         </div>
       </div>
@@ -120,6 +134,7 @@ function OfflineBanner({ checking }: { checking: boolean }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useNetworkStatus = () => {
   const context = useContext(NetworkStatusContext);
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Check,
@@ -6,23 +7,19 @@ import {
   Clock3,
   Eye,
   FileImage,
+  Maximize2,
   RefreshCw,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../../components/ui/dialog";
 import { formatFileSize } from "../../../utils/documentPreview";
 import { getDisplayInitials } from "../../../utils/profileImage";
+import { getRoleThemeStyle } from "../../../theme/roleThemes";
 import type { EnrollmentRequest } from "../services/teacherClassroomService";
 
 type TeacherUploadsSectionProps = {
@@ -42,14 +39,14 @@ const getStatusBadge = (
   return "warning";
 };
 
-const getStatusIcon = (status: EnrollmentRequest["status"]) => {
-  if (status === "accepted") return CheckCircle2;
-  if (status === "rejected") return AlertCircle;
-  return Clock3;
-};
+const STATUS_ICONS = {
+  accepted: CheckCircle2,
+  rejected: AlertCircle,
+  pending: Clock3,
+} as const;
 
 function StatusBadge({ status }: { status: EnrollmentRequest["status"] }) {
-  const Icon = getStatusIcon(status);
+  const Icon = STATUS_ICONS[status];
 
   return (
     <Badge variant={getStatusBadge(status)}>
@@ -93,19 +90,62 @@ export function TeacherUploadsSection({
   onAccept,
   onReject,
 }: TeacherUploadsSectionProps) {
+  const previewViewportRef = useRef<HTMLDivElement | null>(null);
   const [selectedRequest, setSelectedRequest] =
     useState<EnrollmentRequest | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewImageError, setPreviewImageError] = useState(false);
 
   const openViewer = (request: EnrollmentRequest) => {
     setSelectedRequest(request);
     setRejectionNote(request.rejectionNote ?? "");
+    setPreviewZoom(1);
+    setPreviewImageError(false);
   };
 
   const closeViewer = () => {
     setSelectedRequest(null);
     setRejectionNote("");
+    setPreviewZoom(1);
+    setPreviewImageError(false);
   };
+
+  useEffect(() => {
+    if (!selectedRequest) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedRequest(null);
+        setRejectionNote("");
+        setPreviewZoom(1);
+        setPreviewImageError(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedRequest]);
+
+  useLayoutEffect(() => {
+    const viewport = previewViewportRef.current;
+    if (!viewport || !selectedRequest) return;
+
+    viewport.scrollLeft = Math.max(
+      0,
+      (viewport.scrollWidth - viewport.clientWidth) / 2,
+    );
+    viewport.scrollTop = Math.max(
+      0,
+      (viewport.scrollHeight - viewport.clientHeight) / 2,
+    );
+  }, [previewZoom, selectedRequest]);
 
   const pendingCount = requests.filter((request) => request.status === "pending").length;
 
@@ -277,12 +317,13 @@ export function TeacherUploadsSection({
                     <CorThumbnail request={request} onOpen={openViewer} />
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => openViewer(request)}>
+                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
+                    <Button className="w-full" size="sm" variant="outline" onClick={() => openViewer(request)}>
                       <Eye className="mr-2 h-4 w-4" />
                       View COR
                     </Button>
                     <Button
+                      className="w-full"
                       size="sm"
                       onClick={() => onAccept(request)}
                       disabled={request.status !== "pending" || reviewingId === request.id}
@@ -291,6 +332,7 @@ export function TeacherUploadsSection({
                       Accept
                     </Button>
                     <Button
+                      className="w-full"
                       size="sm"
                       variant="destructive"
                       onClick={() => onReject(request)}
@@ -307,114 +349,198 @@ export function TeacherUploadsSection({
         </>
       )}
 
-      <Dialog open={Boolean(selectedRequest)} onOpenChange={(open) => !open && closeViewer()}>
-        <DialogContent className="theme-surface flex max-h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] max-w-6xl flex-col overflow-hidden p-0 sm:w-[calc(100vw-3rem)]">
-          {selectedRequest && (
-            <>
-              <DialogHeader className="shrink-0 border-b theme-border px-5 py-4 pr-12">
-                <DialogTitle>Certificate of Registration</DialogTitle>
-                <DialogDescription>
+      {selectedRequest && createPortal(
+        <div
+          className="role-theme-page fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-2 sm:p-3"
+          style={getRoleThemeStyle("teacher")}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeViewer();
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cor-preview-title"
+            className="theme-surface flex h-full w-full max-w-[1500px] flex-col overflow-hidden rounded-lg border theme-border bg-[var(--app-surface)] text-[var(--app-text)] shadow-[var(--app-shadow)]"
+          >
+              <header className="relative shrink-0 border-b theme-border px-4 py-3 pr-12">
+                <h2 id="cor-preview-title" className="text-lg font-semibold text-[var(--app-text)]">
+                  Certificate of Registration
+                </h2>
+                <p className="mt-1 text-xs theme-muted">
                   {selectedRequest.studentName ?? "Student"} - {selectedRequest.className}
-                </DialogDescription>
-              </DialogHeader>
+                </p>
+                <button
+                  type="button"
+                  onClick={closeViewer}
+                  title="Close preview"
+                  aria-label="Close preview"
+                  className="theme-ring absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-md text-[var(--app-muted)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)] hover:text-[var(--app-text)]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </header>
 
-              <div className="grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[minmax(0,1fr)_280px]">
-                <div className="flex min-h-[45vh] items-center justify-center overflow-auto bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
-                  {selectedRequest.corDataUrl ? (
-                    <img
-                      src={selectedRequest.corDataUrl}
-                      alt={`${selectedRequest.studentName ?? "Student"} COR`}
-                      className="mx-auto block max-h-[calc(100vh-13rem)] max-w-full rounded-lg object-contain shadow-[var(--app-shadow)] lg:max-h-[calc(100vh-8rem)]"
-                    />
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div
+                  className="relative min-h-0 flex-1 overflow-hidden bg-[color-mix(in_srgb,var(--app-bg)_82%,black)]"
+                >
+                  <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] p-1 shadow-[var(--app-shadow)]">
+                    <button
+                      type="button"
+                      title="Zoom out"
+                      aria-label="Zoom out"
+                      disabled={previewZoom <= 1}
+                      onClick={() => setPreviewZoom((current) => Math.max(1, current - 0.25))}
+                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </button>
+                    <span className="w-12 text-center text-xs font-semibold text-[var(--app-text)]">
+                      {Math.round(previewZoom * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      title="Zoom in"
+                      aria-label="Zoom in"
+                      disabled={previewZoom >= 3}
+                      onClick={() => setPreviewZoom((current) => Math.min(3, current + 0.25))}
+                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Fit image"
+                      aria-label="Fit image"
+                      onClick={() => setPreviewZoom(1)}
+                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)]"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div ref={previewViewportRef} className="h-full w-full overflow-auto">
+                  {selectedRequest.corDataUrl && !previewImageError ? (
+                    <div
+                      className="flex min-h-full min-w-full items-center justify-center p-2"
+                      style={{
+                        width: `${previewZoom * 100}%`,
+                        height: `${previewZoom * 100}%`,
+                      }}
+                    >
+                      <img
+                        key={selectedRequest.corDataUrl}
+                        src={selectedRequest.corDataUrl}
+                        alt={`${selectedRequest.studentName ?? "Student"} COR`}
+                        className="block h-full w-full object-contain object-center"
+                        loading="eager"
+                        decoding="sync"
+                        onError={() => setPreviewImageError(true)}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                          objectPosition: "center",
+                        }}
+                      />
+                    </div>
                   ) : (
-                    <div className="grid min-h-80 place-items-center text-sm theme-muted">
-                      COR preview unavailable.
+                    <div className="grid h-full min-h-80 place-items-center px-6 text-center text-sm theme-muted">
+                      {previewImageError
+                        ? "The COR image could not be decoded. Refresh the uploads and open it again."
+                        : "COR preview unavailable."}
                     </div>
                   )}
+                  </div>
                 </div>
 
-                <div className="max-h-[32vh] space-y-3 overflow-y-auto border-t theme-border p-5 text-sm lg:max-h-none lg:border-l lg:border-t-0">
+                <div className="max-h-[42dvh] shrink-0 overflow-y-auto border-t theme-border px-4 py-2.5 text-xs">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
                   <div>
-                    <p className="text-xs uppercase tracking-wide theme-muted">Student</p>
+                    <p className="uppercase theme-muted">Sender</p>
                     <p className="font-semibold text-[var(--app-text)]">
                       {selectedRequest.studentName ?? "Student"}
                     </p>
-                    <p className="text-xs theme-muted">
+                    <p className="truncate text-[var(--app-text)]" title={selectedRequest.studentEmail ?? "No email"}>
                       {selectedRequest.studentEmail ?? "No email"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide theme-muted">Class</p>
-                    <p className="font-semibold text-[var(--app-text)]">
+                    <p className="uppercase theme-muted">Class</p>
+                    <p className="truncate font-semibold text-[var(--app-text)]">
                       {selectedRequest.className}
                     </p>
-                    <p className="text-xs theme-muted">{selectedRequest.classCode}</p>
+                    <p className="theme-muted">{selectedRequest.classCode}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide theme-muted">Submitted</p>
-                    <p className="text-[var(--app-text)]">
+                    <p className="uppercase theme-muted">Submitted</p>
+                    <p className="font-medium text-[var(--app-text)]">
                       {new Date(selectedRequest.submittedAt).toLocaleString()}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide theme-muted">File</p>
-                    <p className="break-words text-[var(--app-text)]">
+                    <p className="uppercase theme-muted">File</p>
+                    <p className="truncate font-medium text-[var(--app-text)]" title={selectedRequest.corFileName}>
                       {selectedRequest.corFileName}
                     </p>
-                    <p className="text-xs theme-muted">
+                    <p className="theme-muted">
                       {formatFileSize(selectedRequest.corFileSize)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide theme-muted">Status</p>
+                    <p className="mb-1 uppercase theme-muted">Status</p>
                     <StatusBadge status={selectedRequest.status} />
                   </div>
+                  </div>
                   {selectedRequest.status === "pending" && (
-                    <div>
-                      <label className="text-xs uppercase tracking-wide theme-muted">
+                    <div className="mt-2 grid gap-2 border-t theme-border pt-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div>
+                      <label className="uppercase theme-muted">
                         Rejection note
                       </label>
-                      <textarea
+                      <input
+                        type="text"
                         value={rejectionNote}
                         onChange={(event) => setRejectionNote(event.target.value)}
-                        rows={3}
                         placeholder="Optional note for the student"
-                        className="theme-ring mt-1 w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 py-2 text-sm text-[var(--app-text)]"
+                        className="theme-ring mt-1 h-9 w-full rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 text-xs text-[var(--app-text)]"
                       />
+                      </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        className="w-full"
+                        variant="destructive"
+                        onClick={() => {
+                          onReject(selectedRequest, rejectionNote.trim() || undefined);
+                          closeViewer();
+                        }}
+                        disabled={reviewingId === selectedRequest.id}
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        Reject
+                      </Button>
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          onAccept(selectedRequest);
+                          closeViewer();
+                        }}
+                        disabled={reviewingId === selectedRequest.id}
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        Accept
+                      </Button>
+                    </div>
                     </div>
                   )}
                 </div>
               </div>
-
-              {selectedRequest.status === "pending" && (
-                <DialogFooter className="shrink-0 border-t theme-border px-5 py-4">
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      onReject(selectedRequest, rejectionNote.trim() || undefined);
-                      closeViewer();
-                    }}
-                    disabled={reviewingId === selectedRequest.id}
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Reject
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      onAccept(selectedRequest);
-                      closeViewer();
-                    }}
-                    disabled={reviewingId === selectedRequest.id}
-                  >
-                    <Check className="mr-2 h-4 w-4" />
-                    Accept
-                  </Button>
-                </DialogFooter>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

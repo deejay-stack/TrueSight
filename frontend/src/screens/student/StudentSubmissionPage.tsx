@@ -50,6 +50,8 @@ import {
   type PreparedFileUpload,
 } from "../../utils/documentPreview";
 import { navigateBack } from "../../utils/navigation";
+import { CodeEditor } from "../../components/code/CodeEditor";
+import { getProgrammingLanguageLabel } from "../../utils/codeRunner";
 
 const formatDateTime = (value: string | null) => {
   if (!value) {
@@ -195,6 +197,10 @@ export default function StudentSubmissionPage() {
     event.preventDefault();
     setDragActive(false);
     void prepareSelectedFile(event.dataTransfer.files?.[0]);
+  };
+
+  const handleCodeChange = (value: string) => {
+    setEssayContent(value);
   };
 
   const handleSubmit = async () => {
@@ -379,40 +385,65 @@ export default function StudentSubmissionPage() {
 
               <Card className="theme-card">
                 <CardContent className="space-y-4 p-5">
-                  {activity.submissionType === "essay" ||
-                  activity.submissionType === "code" ? (
+                  {activity.submissionType === "code" ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
+                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
+                          {getProgrammingLanguageLabel(activity.programmingLanguage)} Submission
+                        </label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleSubmit()}
+                          disabled={isSubmitting || locked || !online || !essayContent.trim()}
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          {isSubmitting
+                            ? "Submitting..."
+                            : submission
+                              ? "Submit Changes"
+                              : "Submit Activity"}
+                        </Button>
+                      </div>
+
+                      <div className="overflow-hidden rounded-lg bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)]">
+                        <div className="flex items-center justify-between border-b theme-border px-4 py-2 text-xs theme-muted">
+                          <span>{getProgrammingLanguageLabel(activity.programmingLanguage)}</span>
+                          <span>{essayContent.split("\n").length} lines</span>
+                        </div>
+                        <CodeEditor
+                          value={essayContent}
+                          language={activity.programmingLanguage}
+                          onChange={handleCodeChange}
+                          readOnly={locked}
+                          minHeight={460}
+                          ariaLabel={`${getProgrammingLanguageLabel(activity.programmingLanguage)} submission editor`}
+                        />
+                      </div>
+
+                      <p className="text-xs theme-muted">
+                        Brackets and parentheses close automatically. Use Tab to indent and Ctrl+Space to open code suggestions.
+                      </p>
+                    </div>
+                  ) : activity.submissionType === "essay" ? (
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
-                        {activity.submissionType === "code" && (
-                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
-                        )}
-                        {activity.submissionType === "code"
-                          ? `${activity.programmingLanguage ?? "Code"} Submission`
-                          : "Essay Content"}
+                        Essay Content
                       </label>
                       <textarea
                         value={essayContent}
                         onChange={(event) => setEssayContent(event.target.value)}
-                        rows={activity.submissionType === "code" ? 18 : 14}
+                        rows={14}
                         disabled={locked}
-                        spellCheck={activity.submissionType !== "code"}
-                        className={[
-                          "theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)] px-4 py-3 text-sm leading-6 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-60",
-                          activity.submissionType === "code"
-                            ? "overflow-x-auto whitespace-pre font-mono"
-                            : "",
-                        ].join(" ")}
-                        placeholder={
-                          activity.submissionType === "code"
-                            ? "Paste or write your code here..."
-                            : "Write your response here..."
-                        }
+                        spellCheck={true}
+                        className="theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)] px-4 py-3 text-sm leading-6 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-60"
+                        placeholder="Write your response here..."
                       />
-                      {activity.submissionType === "code" && (
-                        <p className="text-xs theme-muted">
-                          Indentation and line breaks are preserved. Submitted code is analyzed as text and is not executed.
-                        </p>
-                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">
