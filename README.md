@@ -6,54 +6,50 @@ AI-powered academic integrity management system for classroom submissions. The a
 
 - Frontend: React, TypeScript, Vite
 - Backend: Node.js, Express, PostgreSQL
-- Text detection: GPTZero-compatible API integration
+- Text detection: local DeBERTa-v3-base V3
+- Code detection: local CodeT5-tokenized BiLSTM
 - Image detection: local EfficientNetV2 Keras model through Python/TensorFlow
 
-## Active Image Model
+## Production Detectors
 
-The production image classifier is:
+| Type | Model location | Frozen AI threshold |
+| --- | --- | --- |
+| Text | `models/text_detector/` | >= 0.9913054109 |
+| Code | `models/code_detector/truesight_code_detector.pt` | >= 0.54 |
+| Image | `models/image_detector/efficientnetv2_ai_human.keras` | > 0.50 |
 
-- Model: `models/efficientnetv2_ai_human.keras`
-- Labels: `models/labels.json`
-- Classes: `Human` and `AI-generated`
-- Input: RGB image resized to `224x224`
-- Output: binary sigmoid probability
-- Review label: `Needs Review` when the score is close to the configured threshold
+All models load once in the existing Python worker. Routing uses the activity's
+submission type. Sapling is no longer an active provider and no API key is needed.
+Teacher analysis actions, saved submissions, and existing probability cards are
+preserved. Failed analysis keeps submissions pending with null scores.
 
-`models/labels.json` must contain:
-
-```json
-{
-  "0": "Human",
-  "1": "AI-generated"
-}
-```
-
-The `.keras` file is large and is intentionally ignored by Git. Place it manually at `models/efficientnetv2_ai_human.keras` before running image prediction. Keep `models/labels.json` in the same folder.
+See [local detector setup, architecture, and tests](docs/local-detector-integration.md).
 
 ## Project Structure
 
 ```text
 project-root/
-├── backend/
-│   ├── config/
-│   ├── routes/
-│   ├── services/
-│   │   ├── ImageService.ts
-│   │   └── efficientnetv2_predict.py
-│   ├── requirements.txt
-│   ├── package.json
-│   └── server.js
-├── frontend/
-│   ├── public/
-│   └── src/
-├── models/
-│   ├── efficientnetv2_ai_human.keras
-│   └── labels.json
-├── docs/
-│   └── project-structure.md
-├── .gitignore
-└── README.md
+  backend/
+    config/
+    routes/
+    services/
+      InferenceService.ts
+      DetectorRouter.ts
+      TextService.ts
+      ImageService.ts
+      local_detectors.py
+      efficientnetv2_predict.py
+    tests/
+    requirements.txt
+    package.json
+    server.ts
+  frontend/
+  models/
+    text_detector/
+    code_detector/
+    image_detector/
+  docs/
+  scripts/
 ```
 
 The current backend layout is intentionally kept simple instead of forcing a larger `backend/app` migration.
@@ -65,33 +61,39 @@ Create `backend/.env`:
 ```env
 PORT=5000
 CLIENT_URL=http://localhost:5173
-DATABASE_URL=postgres://user:password@localhost:5432/database_name
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=database_name
+DB_USER=postgres
+DB_PASSWORD=replace_me
 JWT_SECRET=replace_me
-GPTZERO_API_KEY=replace_me
-GPTZERO_API_URL=https://api.gptzero.me/v2/predict/text
 
 # Optional when the default python executable is not the TensorFlow environment.
-PYTHON_EXECUTABLE=C:\Path\To\Python\python.exe
+PYTHON_EXECUTABLE=C:\Path\To\TrueSight\.venv\Scripts\python.exe
 
-# Optional absolute-path overrides. Leave unset to use the top-level models/ folder.
-# IMAGE_MODEL_PATH=C:\Path\To\efficientnetv2_ai_human.keras
-# IMAGE_LABELS_PATH=C:\Path\To\labels.json
+# Sandboxed compiler API for Java, JavaScript, Python, and Dart.
+# The default is Judge0's development endpoint. Configure a self-hosted or
+# managed Judge0-compatible endpoint for production deployments.
+CODE_EXECUTION_API_URL=https://ce.judge0.com
+# CODE_EXECUTION_API_KEY=replace_me
+# CODE_EXECUTION_API_KEY_HEADER=X-Auth-Token
 
-# Image model preprocessing and thresholds.
-IMAGE_MODEL_INPUT_SCALE=0_1
-IMAGE_AI_THRESHOLD=0.50
-IMAGE_HUMAN_CONFIDENT_MAX=0.40
-IMAGE_AI_CONFIDENT_MIN=0.60
-IMAGE_PREDICTOR_TIMEOUT_MS=120000
+# Worker startup / inference timeouts. Thresholds come from frozen model settings.
+AI_STARTUP_TIMEOUT_MS=600000
+AI_INFERENCE_TIMEOUT_MS=120000
+# Set after the official tokenizers have been cached:
+# HF_HUB_OFFLINE=1
 ```
 
 ## Backend Setup
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python.exe scripts/prepare_tokenizers.py
 cd backend
-npm install
-pip install -r requirements.txt
-npm run dev
+npm.cmd install
+npm.cmd run dev
 ```
 
 The backend starts on `http://localhost:5000` by default.
@@ -101,6 +103,10 @@ Python dependencies are listed in `backend/requirements.txt`:
 - `tensorflow`
 - `numpy`
 - `pillow`
+- `torch`
+- `transformers==4.57.6`
+- `huggingface_hub==0.36.2`
+- `sentencepiece`
 
 Use a Python version supported by your installed TensorFlow package. If you use a virtual environment, set `PYTHON_EXECUTABLE` to that environment's Python executable.
 
@@ -114,81 +120,20 @@ npm run dev
 
 The frontend starts on `http://localhost:5173` by default.
 
-## Image Prediction Flow
+## Detection Flow
 
-Prediction is handled by:
+Students save submissions using the existing workflow. A teacher's Analyze action
+sends exactly one request to the detector selected by `activities.submission_type`:
+`essay`/`file` -> text, `code` -> code, `image` -> image. Results use the existing
+PostgreSQL fields and teacher UI. No historical results are rewritten.
 
-- Backend orchestration: `backend/services/ImageService.ts`
-- Python inference script: `backend/services/efficientnetv2_predict.py`
-- Model assets: `models/efficientnetv2_ai_human.keras` and `models/labels.json`
+Image preprocessing retains EXIF handling, RGB conversion, bilinear 224x224 resize,
+and one external /255 rescale. The model's > 0.50 decision is displayed directly.
+The production thresholds are frozen and have no environment overrides.
 
-The backend starts a reusable Python EfficientNetV2 worker so TensorFlow and the
-Keras model are loaded once and reused across image analyses. The Python
-predictor:
-
-1. Loads `models/efficientnetv2_ai_human.keras`.
-2. Loads `models/labels.json`.
-3. Warms up the model once during backend startup.
-4. Decodes the uploaded image and handles EXIF orientation.
-5. Converts it to RGB.
-5. Resizes it to `224x224`.
-6. Converts it to a NumPy array and adds the batch dimension.
-7. Uses `IMAGE_MODEL_INPUT_SCALE=0_1` for the current saved model, which returns finite predictions with `0_1` inputs. Use `raw` only if the model was trained/exported with built-in EfficientNetV2 preprocessing.
-8. Runs Keras prediction and applies configurable threshold/review-band handling.
-9. Returns `Human`, `AI-generated`, or `Needs Review` with confidence, AI probability, Human probability, threshold, message, and timing data.
-
-Default image thresholds:
-
-- `AI probability <= 40%`: `Human`
-- `40% < AI probability < 60%`: `Needs Review`
-- `AI probability >= 60%`: `AI-generated`
-
-## Testing Image Prediction
-
-1. Confirm the model files exist:
-
-   ```powershell
-   Test-Path models\efficientnetv2_ai_human.keras
-   Get-Content models\labels.json
-   ```
-
-2. Confirm Python can import TensorFlow:
-
-   ```powershell
-   python -c "import tensorflow as tf; print(tf.__version__)"
-   ```
-
-3. Start the backend and frontend.
-
-4. Submit an image through the app. The result can be:
-
-   - `Human`
-   - `AI-generated`
-   - `Needs Review`
-
-If prediction fails, the backend returns a fallback result with an error message in the image analysis details.
-
-For capstone demo testing, place known images under:
-
-```text
-demo_samples/human/
-demo_samples/ai_generated/
-demo_samples/mixed/
-```
-
-Then run:
-
-```powershell
-python scripts/test_image_model.py
-```
-
-To compare thresholds:
-
-```powershell
-python scripts/test_image_model.py --thresholds 0.40,0.45,0.50,0.55,0.60
-```
-
-See `docs/image-model-demo-guide.md` for threshold calibration guidance.
+`GET /health` reports each model's readiness without exposing paths.
+See [verification commands](docs/local-detector-integration.md#verification) for
+real model, database, routing, and regression tests.
 
 ## Useful Checks
 
@@ -214,4 +159,4 @@ python -m py_compile backend\services\efficientnetv2_predict.py
 
 ## Cleanup Notes
 
-Legacy image model artifacts are not used. The active image model path is the top-level `models/` folder. Build output, logs, temporary uploads, Python caches, local virtual environments, and large model binaries are ignored by Git.
+Active model artifacts remain in their existing text_detector, code_detector, and image_detector subfolders under `models/`. Build output, logs, temporary uploads, Python caches, local virtual environments, and large model binaries are ignored by Git.

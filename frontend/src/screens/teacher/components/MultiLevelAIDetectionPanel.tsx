@@ -133,8 +133,8 @@ const getHeatmapLevel = (score: number): string => {
 };
 
 const getVerdictTone = (prediction: string, aiProbability?: number | null): ProbabilityTone => {
-  if (prediction === "AI-generated") return "ai";
-  if (prediction === "Human") return "human";
+  if (prediction === "AI-generated" || prediction === "Likely AI-generated") return "ai";
+  if (prediction === "Human" || prediction === "Likely human-created") return "human";
   if (prediction === "Needs Review") return "suspicious";
   if (typeof aiProbability === "number") return getProbabilityTone(aiProbability);
   return "suspicious";
@@ -471,7 +471,7 @@ export function MultiLevelAIDetectionPanel({
     ? tokenHeatmapSegments
     : sentenceHeatmapSegments;
   const heatmapSource = hasHighlightedSegments(tokenHeatmapSegments)
-    ? "Sapling token probabilities"
+    ? "Stored token probabilities"
     : "sentence-level suspicious sections";
   const imageProfile =
     typeof details?.imageProfile === "object" && details.imageProfile !== null
@@ -509,7 +509,8 @@ export function MultiLevelAIDetectionPanel({
       tone: (humanRevisionLikelihood ?? 0) >= 55 ? "calm" : "warning",
     },
   ];
-  const visibleScoreCards = scoreCards.length > 0 ? scoreCards : fallbackScoreCards;
+  const analysisFailed = details?.analysisStatus === "failed";
+  const visibleScoreCards = analysisFailed ? [] : scoreCards.length > 0 ? scoreCards : fallbackScoreCards;
   const tabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     {
@@ -536,6 +537,10 @@ export function MultiLevelAIDetectionPanel({
             <p className="text-sm theme-muted">
               {provider} report with evidence, status, and teacher review steps.
             </p>
+            <p className="text-xs theme-muted">
+              Detector: {detectorType} · Model: {typeof details?.modelName === "string" ? details.modelName : provider}
+            </p>
+            {analysisFailed && <p className="text-sm theme-muted">AI detection temporarily unavailable. Your submission is preserved.</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {riskBand && (
@@ -686,10 +691,10 @@ export function MultiLevelAIDetectionPanel({
                 {analysisMessage && (
                   <p className="mt-2 text-sm theme-muted">{analysisMessage}</p>
                 )}
-                {detectorType === "image" && threshold !== null && (
+                {threshold !== null && (
                   <p className="mt-2 text-xs theme-muted">
-                    Threshold: {(threshold * 100).toFixed(0)}%
-                    {humanConfidentMax !== null && aiConfidentMin !== null
+                    Threshold: {(threshold * 100).toFixed(detectorType === "text" ? 8 : 2)}%
+                    {humanConfidentMax !== null && aiConfidentMin !== null && humanConfidentMax < aiConfidentMin
                       ? ` | Review band: ${(humanConfidentMax * 100).toFixed(0)}%-${(aiConfidentMin * 100).toFixed(0)}%`
                       : ""}
                   </p>

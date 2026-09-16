@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
 import classRoutes from './routes/classes.js';
-import { warmUpImageModel } from './services/ImageService.js';
+import { getModelHealth, startInferenceWorker, stopInferenceWorker } from './services/InferenceService.js';
 
 dotenv.config();
 
@@ -41,6 +41,11 @@ app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
+app.get('/health', (_req, res) => {
+    const health = getModelHealth();
+    res.status(health.status === 'ok' ? 200 : 503).json(health);
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/classes', classRoutes);
 
@@ -48,7 +53,11 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    warmUpImageModel().catch((error) => {
-        console.warn(`[image-model] Warm-up skipped: ${error.message}`);
+    startInferenceWorker().catch((error) => {
+        console.warn(`[ai-model] Startup failed: ${error.message}`);
     });
 });
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => { stopInferenceWorker(); process.exit(0); });
+}

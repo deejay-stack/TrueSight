@@ -115,6 +115,18 @@ const getBarTone = (score: number): string => {
 
 export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
   const parsedSignals = parseSignals(details?.explainabilitySignals);
+  if ((typeof details?.modelName === "string" || details?.analysisStatus === "failed") && parsedSignals.length === 0) {
+    return (
+      <Card className="theme-card">
+        <CardContent className="space-y-2 p-5">
+          <h3 className="text-lg font-semibold text-[var(--app-text)]">AI Explainability</h3>
+          <p className="text-sm theme-muted">
+            Sentence, token, and writing-style explanations are unavailable for this analysis.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
   const signalById = new Map(parsedSignals.map((signal) => [signal.id, signal]));
 
   const mergedSignals = REQUIRED_SIGNALS.map((required) => {

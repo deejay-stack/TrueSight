@@ -6,8 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PREDICTOR_PATH = ROOT / "backend" / "services" / "efficientnetv2_predict.py"
-DEFAULT_MODEL_PATH = ROOT / "models" / "efficientnetv2_ai_human.keras"
-DEFAULT_LABELS_PATH = ROOT / "models" / "labels.json"
+DEFAULT_MODEL_PATH = ROOT / "models" / "image_detector" / "efficientnetv2_ai_human.keras"
+DEFAULT_LABELS_PATH = ROOT / "models" / "image_detector" / "labels.json"
 DEFAULT_SAMPLES_DIR = ROOT / "demo_samples"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 

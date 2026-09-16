@@ -112,6 +112,7 @@ export default function SubmissionDetailPage() {
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
+  const [codeRunSummary, setCodeRunSummary] = useState("");
   const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [isRunningCode, setIsRunningCode] = useState(false);
 
@@ -162,6 +163,7 @@ export default function SubmissionDetailPage() {
     });
     setCodeInput("");
     setCodeOutput("");
+    setCodeRunSummary("");
     setCodePreviewHtml("");
   }, [submission]);
 
@@ -241,7 +243,8 @@ export default function SubmissionDetailPage() {
         typeof result.confidenceScore === "number"
           ? ` (${result.confidenceScore.toFixed(2)}% confidence)`
           : "";
-      toast.success(`Submission analyzed${confidenceText}.`);
+      if (result.analysisDetails?.analysisStatus === "failed") toast.error("AI detection temporarily unavailable.");
+      else toast.success(`Submission analyzed${confidenceText}.`);
       await loadSubmission();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to analyze submission.";
@@ -298,7 +301,8 @@ export default function SubmissionDetailPage() {
     }
 
     setIsRunningCode(true);
-    setCodeOutput("Starting runtime...");
+    setCodeOutput("Sending program to the compiler...");
+    setCodeRunSummary("");
     setCodePreviewHtml("");
 
     try {
@@ -308,6 +312,18 @@ export default function SubmissionDetailPage() {
         codeInput,
       );
       setCodeOutput(result.output);
+      setCodeRunSummary(
+        [
+          result.status,
+          result.runtime,
+          result.executionTime ? `${result.executionTime}s` : "",
+          typeof result.memory === "number"
+            ? `${Math.round(result.memory / 1024)} MB`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
       setCodePreviewHtml(result.previewHtml ?? "");
     } finally {
       setIsRunningCode(false);
@@ -325,6 +341,7 @@ export default function SubmissionDetailPage() {
             language={submission.programmingLanguage}
             readOnly
             minHeight={460}
+            darkMode={darkMode}
             ariaLabel={`${getProgrammingLanguageLabel(submission.programmingLanguage)} submitted code`}
           />
         );
@@ -577,11 +594,20 @@ export default function SubmissionDetailPage() {
                         placeholder="Optional input, one value or line at a time"
                         className="theme-ring h-36 w-full resize-none rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]"
                       />
+                      <p className="text-xs theme-muted">
+                        Passed directly to standard input. Use Scanner/System.in in Java,
+                        process.stdin in JavaScript, input() in Python, or stdin in Dart.
+                      </p>
                     </div>
                     <div className="overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,black)]">
                       <div className="flex h-9 items-center gap-2 border-b theme-border px-3 text-xs font-semibold text-[var(--app-text)]">
                         <Terminal className="h-4 w-4 text-[var(--app-accent)]" />
                         Program Output
+                        {codeRunSummary && (
+                          <span className="ml-auto truncate font-normal theme-muted">
+                            {codeRunSummary}
+                          </span>
+                        )}
                       </div>
                       <pre className="h-[106px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]">
                         {codeOutput || "Run the submitted code to inspect its output."}
@@ -674,6 +700,11 @@ export default function SubmissionDetailPage() {
             <Card className="theme-card">
               <CardContent className="space-y-3 p-5">
                 <h3 className="text-lg font-semibold text-[var(--app-text)]">Analysis Snapshot</h3>
+                {typeof submission.analysisDetails?.modelName === "string" && (
+                  <p className="text-sm theme-muted">
+                    Detector: {String(submission.analysisDetails.detectorType)} · Model: {submission.analysisDetails.modelName}
+                  </p>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
                     <p className="text-xs theme-muted">Prediction</p>
@@ -686,7 +717,7 @@ export default function SubmissionDetailPage() {
                     </p>
                     {threshold !== null && (
                       <p className="mt-1 text-xs theme-muted">
-                        Threshold: {(threshold * 100).toFixed(0)}%
+                        Threshold: {(threshold * 100).toFixed(8)}%
                       </p>
                     )}
                   </div>

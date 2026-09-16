@@ -361,14 +361,44 @@ export default function StudentScreen() {
   }, [activeSection, navigate, section]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void loadNotifications();
-    }, 60_000);
+    const activeJoinCode = joinLookup?.classroom.code;
+    let lastRefreshAt = 0;
+
+    const refreshEnrollmentState = () => {
+      const now = Date.now();
+      if (now - lastRefreshAt < 1_000) return;
+      lastRefreshAt = now;
+
+      void Promise.all([
+        loadEnrolledClasses(),
+        loadEnrollmentRequests(),
+        loadNotifications(),
+      ]);
+
+      if (activeJoinCode) {
+        void lookupClassByCode(activeJoinCode)
+          .then((lookup) => setJoinLookup(lookup))
+          .catch(() => undefined);
+      }
+    };
+
+    const timer = window.setInterval(refreshEnrollmentState, 30_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshEnrollmentState();
+      }
+    };
+
+    window.addEventListener("focus", refreshEnrollmentState);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.clearInterval(timer);
+      window.removeEventListener("focus", refreshEnrollmentState);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [joinLookup?.classroom.code]);
 
   useEffect(() => {
     if (!selectedClassId) {
@@ -624,7 +654,7 @@ export default function StudentScreen() {
                   </div>
                   {joinLookup.request.rejectionNote && (
                     <p className="mt-2 text-xs">
-                      Note: {joinLookup.request.rejectionNote}
+                      Teacher note: {joinLookup.request.rejectionNote}
                     </p>
                   )}
                 </div>
@@ -746,8 +776,9 @@ export default function StudentScreen() {
                       {getEnrollmentStatusCopy(request.status)}
                     </p>
                     {request.rejectionNote && (
-                      <p className="mt-2 text-xs theme-muted">
-                        Note: {request.rejectionNote}
+                      <p className="mt-2 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs text-[var(--app-text)]">
+                        <span className="font-semibold">Teacher note:</span>{" "}
+                        {request.rejectionNote}
                       </p>
                     )}
                     <p className="mt-3 text-xs theme-muted">

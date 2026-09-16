@@ -3,12 +3,11 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import type { JwtPayload } from "jsonwebtoken";
 import pool from "../config/db.js";
-import { analyzeText as analyzeTextWithService } from "../services/TextService.js";
-import { analyzeImage } from "../services/ImageService.js";
+import { analyzeSubmissionContent } from "../services/DetectorRouter.js";
 import {
-  extractTextFromSubmissionFile,
-  isImageSubmission,
-} from "../services/FileTextExtractor.js";
+  CodeExecutionError,
+  executeCode,
+} from "../services/CodeExecutionService.js";
 
 const router = express.Router();
 
@@ -20,6 +19,27 @@ const notificationTypes = new Set([
   "new_submission",
 ]);
 const notificationStatuses = new Set(["unread", "read"]);
+const CODE_EXECUTION_WINDOW_MS = 60_000;
+const CODE_EXECUTION_LIMIT = 12;
+const codeExecutionUsage = new Map<
+  string,
+  { count: number; windowStartedAt: number }
+>();
+
+const consumeCodeExecutionAttempt = (userId: number | string) => {
+  const key = String(userId);
+  const now = Date.now();
+  const current = codeExecutionUsage.get(key);
+
+  if (!current || now - current.windowStartedAt >= CODE_EXECUTION_WINDOW_MS) {
+    codeExecutionUsage.set(key, { count: 1, windowStartedAt: now });
+    return true;
+  }
+
+  if (current.count >= CODE_EXECUTION_LIMIT) return false;
+  current.count += 1;
+  return true;
+};
 
 const ensureClassroomSchema = async () => {
   if (schemaReady) return;
@@ -1719,7 +1739,7 @@ router.get("/teacher/analytics", protect, async (req, res) => {
     }
 
     const submissionResult = await pool.query(
-      `SELECT s.ai_probability, s.submitted_at, c.id AS class_id, c.name AS class_name
+      `SELECT s.ai_probability, s.is_ai_generated, s.submitted_at, c.id AS class_id, c.name AS class_name
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
        INNER JOIN classes c ON c.id = a.class_id
@@ -1743,7 +1763,7 @@ router.get("/teacher/analytics", protect, async (req, res) => {
 
       const className = row.class_name ?? "Unknown Class";
       const aiProbability = getNumericCandidate(row.ai_probability);
-      const isFlagged = aiProbability !== null && aiProbability >= 60;
+      const isFlagged = row.is_ai_generated === true;
 
       if (!classStatsMap.has(classId)) {
         classStatsMap.set(classId, {
@@ -1894,6 +1914,31 @@ router.post("/", protect, async (req, res) => {
       message: "Failed to create class.",
       error: error.message,
     });
+  }
+});
+
+router.post("/code/execute", protect, async (req, res) => {
+  try {
+    if (!consumeCodeExecutionAttempt(req.user.id)) {
+      return res.status(429).json({
+        message: "Code execution limit reached. Please wait a minute and try again.",
+      });
+    }
+
+    const result = await executeCode({
+      language: req.body.language,
+      sourceCode: req.body.sourceCode,
+      stdin: req.body.stdin,
+    });
+
+    return res.status(200).json({ result });
+  } catch (error) {
+    const statusCode =
+      error instanceof CodeExecutionError ? error.statusCode : 500;
+    const message =
+      error instanceof Error ? error.message : "Failed to execute code.";
+
+    return res.status(statusCode).json({ message });
   }
 });
 
@@ -2223,8 +2268,11 @@ router.patch("/enrollment-requests/:requestId", protect, async (req, res) => {
 
     const reviewed = await client.query(
       `UPDATE class_enrollment_requests
-       SET status = $2,
-           rejection_note = CASE WHEN $2 = 'rejected' THEN $3 ELSE NULL END,
+       SET status = $2::VARCHAR(20),
+           rejection_note = CASE
+             WHEN $2::VARCHAR(20) = 'rejected'::VARCHAR(20) THEN $3::TEXT
+             ELSE NULL
+           END,
            reviewed_by = $4,
            reviewed_at = NOW()
        WHERE id = $1
@@ -3245,21 +3293,6 @@ router.patch("/submissions/:submissionId/evaluation", protect, async (req, res) 
   }
 });
 
-const analyzeSubmissionContent = async (submission) => {
-  if (isImageSubmission(submission.file_name, submission.file_type)) {
-    return analyzeImage(submission.file_data_url, submission.file_name);
-  }
-
-  const extractedText = await extractTextFromSubmissionFile({
-    fileName: submission.file_name,
-    fileType: submission.file_type,
-    fileDataUrl: submission.file_data_url,
-    contentText: submission.content_text,
-  });
-
-  return analyzeTextWithService(extractedText);
-};
-
 router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
   try {
     if (req.user.role !== "teacher") {
@@ -3275,7 +3308,7 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
     }
 
     const submissionResult = await pool.query(
-      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url
+      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, a.submission_type
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
        INNER JOIN classes c ON c.id = a.class_id
@@ -3295,7 +3328,7 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
 
     const updated = await pool.query(
       `UPDATE submissions
-       SET status = 'analyzed',
+       SET status = CASE WHEN $4::jsonb->>'analysisStatus' = 'failed' THEN 'pending' ELSE 'analyzed' END,
            ai_probability = $2,
            is_ai_generated = $3,
            analysis_details = $4::jsonb,
@@ -3314,7 +3347,7 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
     );
 
     return res.status(200).json({
-      message: "Submission analyzed successfully.",
+      message: analysis.details.analysisStatus === "failed" ? "AI detection temporarily unavailable." : "Submission analyzed successfully.",
       submission: updated.rows[0],
     });
   } catch (error) {
@@ -3349,7 +3382,7 @@ router.post("/:classId/submissions/analyze", protect, async (req, res) => {
     }
 
     const submissionRows = await pool.query(
-      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, s.status
+      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, s.status, a.submission_type
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
        WHERE a.class_id = $1
@@ -3367,13 +3400,14 @@ router.post("/:classId/submissions/analyze", protect, async (req, res) => {
     }
 
     let updated = 0;
+    let failed = 0;
 
     for (const submission of submissionRows.rows) {
       const analysis = await analyzeSubmissionContent(submission);
 
       await pool.query(
         `UPDATE submissions
-         SET status = 'analyzed',
+         SET status = CASE WHEN $4::jsonb->>'analysisStatus' = 'failed' THEN 'pending' ELSE 'analyzed' END,
              ai_probability = $2,
              is_ai_generated = $3,
              analysis_details = $4::jsonb,
@@ -3391,12 +3425,14 @@ router.post("/:classId/submissions/analyze", protect, async (req, res) => {
         ],
       );
 
-      updated += 1;
+      if (analysis.details.analysisStatus === "failed") failed += 1;
+      else updated += 1;
     }
 
     return res.status(200).json({
-      message: "Submissions analyzed successfully.",
+      message: failed ? "Some analyses are unavailable. Submissions have been preserved." : "Submissions analyzed successfully.",
       updated,
+      failed,
     });
   } catch (error) {
     return res.status(500).json({

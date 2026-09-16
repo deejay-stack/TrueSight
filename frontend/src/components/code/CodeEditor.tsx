@@ -19,6 +19,7 @@ type CodeEditorProps = {
   readOnly?: boolean;
   minHeight?: number;
   ariaLabel?: string;
+  darkMode?: boolean;
 };
 
 const normalizeLanguage = (language: string | null | undefined) =>
@@ -57,7 +58,7 @@ const getLanguageExtension = (language: string | null | undefined) => {
   }
 };
 
-const editorHighlightStyle = HighlightStyle.define([
+const darkEditorHighlightStyle = HighlightStyle.define([
   { tag: tags.keyword, color: "#c084fc" },
   { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "#38bdf8" },
   { tag: [tags.definition(tags.variableName), tags.definition(tags.propertyName)], color: "#4ade80" },
@@ -70,6 +71,19 @@ const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.tagName, tags.attributeName], color: "#f472b6" },
 ]);
 
+const lightEditorHighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: "#7c3aed", fontWeight: "600" },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "#0369a1" },
+  { tag: [tags.definition(tags.variableName), tags.definition(tags.propertyName)], color: "#15803d" },
+  { tag: [tags.variableName, tags.propertyName], color: "#1d4ed8" },
+  { tag: [tags.string, tags.special(tags.string)], color: "#a16207" },
+  { tag: [tags.number, tags.bool, tags.null], color: "#be123c" },
+  { tag: [tags.typeName, tags.className, tags.namespace], color: "#0f766e" },
+  { tag: [tags.comment, tags.docComment], color: "#64748b", fontStyle: "italic" },
+  { tag: [tags.operator, tags.punctuation], color: "#334155" },
+  { tag: [tags.tagName, tags.attributeName], color: "#be185d" },
+]);
+
 export function CodeEditor({
   value,
   language,
@@ -77,50 +91,67 @@ export function CodeEditor({
   readOnly = false,
   minHeight = 420,
   ariaLabel = "Code editor",
+  darkMode = false,
 }: CodeEditorProps) {
+  const editorHighlightStyle = darkMode
+    ? darkEditorHighlightStyle
+    : lightEditorHighlightStyle;
   const extensions = useMemo(
     () => [
       getLanguageExtension(language),
       syntaxHighlighting(editorHighlightStyle),
-      EditorView.theme({
-        "&": {
-          minHeight: `${minHeight}px`,
-          backgroundColor: "color-mix(in srgb, var(--app-surface) 88%, transparent)",
-          color: "var(--app-text)",
-          fontSize: "14px",
+      EditorView.theme(
+        {
+          "&": {
+            minHeight: `${minHeight}px`,
+            backgroundColor: "var(--app-surface)",
+            color: "var(--app-text)",
+            fontSize: "14px",
+          },
+          ".cm-scroller": {
+            minHeight: `${minHeight}px`,
+            backgroundColor: "var(--app-surface)",
+            color: "var(--app-text)",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            lineHeight: "1.6",
+          },
+          ".cm-content": {
+            padding: "14px 0",
+            caretColor: "var(--app-accent)",
+          },
+          ".cm-line": { padding: "0 16px" },
+          ".cm-gutters": {
+            backgroundColor: "var(--app-surface-strong)",
+            color: "var(--app-muted)",
+            borderRight: "1px solid var(--app-border)",
+          },
+          ".cm-activeLine, .cm-activeLineGutter": {
+            backgroundColor: "color-mix(in srgb, var(--app-accent) 12%, transparent)",
+          },
+          ".cm-cursor, .cm-dropCursor": {
+            borderLeftColor: "var(--app-accent)",
+          },
+          ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
+            backgroundColor: "color-mix(in srgb, var(--app-accent) 30%, transparent) !important",
+          },
+          "&.cm-focused": { outline: "none" },
+          ".cm-tooltip": {
+            backgroundColor: "var(--app-surface-strong)",
+            color: "var(--app-text)",
+            border: "1px solid var(--app-border)",
+          },
+          ".cm-tooltip-autocomplete > ul > li": {
+            color: "var(--app-text)",
+          },
+          ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+            backgroundColor: "color-mix(in srgb, var(--app-accent) 22%, var(--app-surface-strong))",
+            color: "var(--app-text)",
+          },
         },
-        ".cm-scroller": {
-          minHeight: `${minHeight}px`,
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-          lineHeight: "1.6",
-        },
-        ".cm-content": { padding: "14px 0" },
-        ".cm-line": { padding: "0 16px" },
-        ".cm-gutters": {
-          backgroundColor: "color-mix(in srgb, var(--app-surface-strong) 94%, transparent)",
-          color: "var(--app-muted)",
-          borderRight: "1px solid var(--app-border)",
-        },
-        ".cm-activeLine, .cm-activeLineGutter": {
-          backgroundColor: "color-mix(in srgb, var(--app-accent) 9%, transparent)",
-        },
-        ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--app-accent)" },
-        ".cm-selectionBackground, ::selection": {
-          backgroundColor: "color-mix(in srgb, var(--app-accent) 28%, transparent) !important",
-        },
-        ".cm-focused": { outline: "none" },
-        ".cm-tooltip": {
-          backgroundColor: "var(--app-surface-strong)",
-          color: "var(--app-text)",
-          border: "1px solid var(--app-border)",
-        },
-        ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-          backgroundColor: "color-mix(in srgb, var(--app-accent) 20%, var(--app-surface-strong))",
-          color: "var(--app-text)",
-        },
-      }),
+        { dark: darkMode },
+      ),
     ],
-    [language, minHeight],
+    [darkMode, editorHighlightStyle, language, minHeight],
   );
 
   return (
@@ -128,8 +159,9 @@ export function CodeEditor({
       <CodeMirror
         value={value}
         onChange={onChange}
-        readOnly={readOnly}
-        editable={!readOnly}
+      readOnly={readOnly}
+      editable={!readOnly}
+      theme={darkMode ? "dark" : "light"}
         extensions={extensions}
         basicSetup={{
           lineNumbers: true,
@@ -146,4 +178,3 @@ export function CodeEditor({
     </div>
   );
 }
-

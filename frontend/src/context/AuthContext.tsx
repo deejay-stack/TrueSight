@@ -67,6 +67,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [sessionReady, setSessionReady] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean>(getInitialDarkMode);
   const authGenerationRef = useRef(0);
+  const sessionHydrationRef = useRef<Promise<void> | null>(null);
 
   useLayoutEffect(() => {
     localStorage.setItem(DARK_MODE_KEY, String(darkMode));
@@ -79,8 +80,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     let active = true;
+    let hydrationController: AbortController | null = null;
 
     const hydrateSession = async () => {
+      hydrationController?.abort();
+      const controller = new AbortController();
+      hydrationController = controller;
       const generation = authGenerationRef.current;
 
       if (!isConnectionAvailable()) {
@@ -94,6 +99,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const response = await fetch(`${API_URL}/me`, {
           method: "GET",
           credentials: "include",
+          signal: controller.signal,
         });
 
         markBackendReachable();
@@ -116,26 +122,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(profile);
         }
       } catch (error) {
+        if (controller.signal.aborted) return;
+
         if (isLikelyConnectivityError(error)) {
           markBackendUnreachable();
         }
       } finally {
-        if (active) {
+        if (active && hydrationController === controller) {
           setSessionReady(true);
         }
       }
     };
 
-    void hydrateSession();
+    const startSessionHydration = () => {
+      const hydration = hydrateSession();
+      sessionHydrationRef.current = hydration;
+
+      void hydration.finally(() => {
+        if (sessionHydrationRef.current === hydration) {
+          sessionHydrationRef.current = null;
+        }
+      });
+    };
+
+    startSessionHydration();
 
     const handleReconnect = () => {
-      void hydrateSession();
+      startSessionHydration();
     };
 
     window.addEventListener(RECONNECTED_EVENT, handleReconnect);
 
     return () => {
       active = false;
+      hydrationController?.abort();
       window.removeEventListener(RECONNECTED_EVENT, handleReconnect);
     };
   }, []);
@@ -158,6 +178,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw createOfflineActionError();
     }
 
+    await sessionHydrationRef.current;
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/login`, {
@@ -200,6 +221,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw createOfflineActionError();
     }
 
+    await sessionHydrationRef.current;
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/google`, {
@@ -252,6 +274,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw createOfflineActionError();
     }
 
+    await sessionHydrationRef.current;
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/signup`, {
@@ -278,8 +301,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Failed to parse created account profile.");
       }
 
+      // Signup creates the account only; it must not establish an authenticated
+      // client session before the user completes the login flow.
       authGenerationRef.current += 1;
-      setUser(profile);
+      setUser(null);
       setSessionReady(true);
     } catch (error) {
       clearAuthState();

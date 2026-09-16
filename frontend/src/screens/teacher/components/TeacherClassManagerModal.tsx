@@ -73,19 +73,10 @@ const getSubmissionTypeLabel = (type: ActivitySubmissionType) => {
 };
 
 const PROGRAMMING_LANGUAGES = [
-  "JavaScript",
-  "TypeScript",
-  "Python",
   "Java",
-  "C",
-  "C++",
-  "C#",
-  "PHP",
+  "JavaScript",
+  "Python",
   "Dart",
-  "HTML",
-  "CSS",
-  "SQL",
-  "Other",
 ];
 
 const getDisplayPrediction = (submission: ClassSubmission) => {

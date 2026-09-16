@@ -1,0 +1,33 @@
+{
+    "system": "TrueSight",
+    "component": "AI-generated text detector",
+    "production_model": "Final Candidate V3",
+    "base_model": "microsoft/deberta-v3-base",
+    "model_directory": "/content/drive/MyDrive/data_v3/models/deberta_final_candidate_v3/final",
+    "best_epoch": 1,
+    "checkpoint_step": 3750,
+    "max_length": 512,
+    "labels": {
+        "0": "HUMAN",
+        "1": "AI"
+    },
+    "decision_threshold": 0.9913054109,
+    "threshold_rule": "AI if probability >= threshold",
+    "final_test_samples": 12000,
+    "final_test_metrics": {
+        "accuracy": 0.9535,
+        "precision": 0.9696,
+        "recall": 0.9363,
+        "f1": 0.9527,
+        "roc_auc": 0.9921,
+        "specificity": 0.9707,
+        "false_positive_rate": 0.0293,
+        "false_negative_rate": 0.0637,
+        "tn": 5824,
+        "fp": 176,
+        "fn": 382,
+        "tp": 5618
+    },
+    "selection_reason": "V3 satisfied the predefined overall FPR <= 3% operating objective while achieving higher AI recall, F1, accuracy, and ROC-AUC than V2 on the same untouched final test set.",
+    "known_limitation": "Performance varies by source/domain. The MAGE subset produced a higher false-positive rate than the overall test set."
+}

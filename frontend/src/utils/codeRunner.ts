@@ -1,126 +1,83 @@
+import { API_BASE_URL } from "../config/api";
+import {
+  createOfflineActionError,
+  isConnectionAvailable,
+  isLikelyConnectivityError,
+  markBackendReachable,
+  markBackendUnreachable,
+} from "../services/connectivity";
+
 export type CodeRunResult = {
   output: string;
   previewHtml?: string;
+  status?: string;
+  runtime?: string;
+  executionTime?: string | null;
+  memory?: number | null;
+  exitCode?: number | null;
 };
 
-const JAVASCRIPT_TIMEOUT_MS = 4_000;
-const PYTHON_TIMEOUT_MS = 20_000;
-const PYODIDE_VERSION = "0.27.7";
+type CompilerResponse = {
+  result?: CodeRunResult;
+  message?: string;
+};
+
+const COMPILER_LANGUAGES = new Set([
+  "dart",
+  "java",
+  "javascript",
+  "js",
+  "node",
+  "nodejs",
+  "python",
+  "py",
+  "python3",
+]);
 
 export const normalizeProgrammingLanguage = (
   language: string | null | undefined,
-) => (language ?? "code").trim().toLowerCase().replace(/\s+/g, "");
+) => (language ?? "code").trim().toLowerCase().replace(/[\s._-]+/g, "");
 
 export const getProgrammingLanguageLabel = (
   language: string | null | undefined,
 ) => language?.trim() || "Code";
 
 const formatError = (error: unknown) =>
-  error instanceof Error ? error.stack || error.message : String(error);
+  error instanceof Error ? error.message : String(error);
 
-const runWorker = (
-  source: string,
-  payload: Record<string, unknown>,
-  timeoutMs: number,
-) => {
-  const blobUrl = URL.createObjectURL(
-    new Blob([source], { type: "text/javascript" }),
-  );
-  const worker = new Worker(blobUrl, { type: "module" });
-
-  return new Promise<string>((resolve) => {
-    let settled = false;
-    let timeoutId = 0;
-
-    const finish = (output: string) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeoutId);
-      worker.terminate();
-      URL.revokeObjectURL(blobUrl);
-      resolve(output);
-    };
-
-    timeoutId = window.setTimeout(
-      () => finish(`Execution stopped after ${timeoutMs / 1000} seconds.`),
-      timeoutMs,
-    );
-    worker.onmessage = (event: MessageEvent<{ output: string }>) =>
-      finish(event.data.output);
-    worker.onerror = (event) =>
-      finish(event.message || "The browser could not start the code runtime.");
-    worker.postMessage(payload);
-  });
-};
-
-const runJavaScript = (code: string, stdin: string, typescript = false) =>
-  runWorker(
-    `
-const formatValue = (value) => {
-  if (typeof value === "string") return value;
-  if (typeof value === "undefined") return "undefined";
-  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
-};
-
-self.onmessage = async ({ data }) => {
-  const output = [];
-  const input = String(data.stdin || "").split(/\\r?\\n/);
-  const consoleProxy = {};
-  ["log", "info", "warn", "error"].forEach((level) => {
-    consoleProxy[level] = (...args) => output.push(args.map(formatValue).join(" "));
-  });
-
-  try {
-    let executableCode = data.code;
-    if (data.typescript) {
-      const ts = await import("https://esm.sh/typescript@6.0.2");
-      executableCode = ts.transpileModule(data.code, {
-        compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.None },
-      }).outputText;
-    }
-    const execute = new Function(
-      "console",
-      "prompt",
-      '"use strict"; return (async () => {\\n' + executableCode + '\\n})();',
-    );
-    const result = await execute(consoleProxy, () => input.shift() ?? "");
-    if (typeof result !== "undefined") output.push(formatValue(result));
-    self.postMessage({ output: output.join("\\n") || "Program finished with no output." });
-  } catch (error) {
-    self.postMessage({ output: error && error.stack ? error.stack : String(error) });
+const executeWithCompiler = async (
+  code: string,
+  language: string,
+  stdin: string,
+): Promise<CodeRunResult> => {
+  if (!isConnectionAvailable()) {
+    throw createOfflineActionError();
   }
-};
-`,
-    { code, stdin, typescript },
-    typescript ? PYTHON_TIMEOUT_MS : JAVASCRIPT_TIMEOUT_MS,
-  );
 
-const runPython = (code: string, stdin: string) =>
-  runWorker(
-    `
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.mjs";
-
-self.onmessage = async ({ data }) => {
-  const output = [];
-  const input = String(data.stdin || "").split(/\\r?\\n/);
   try {
-    const pyodide = await loadPyodide({
-      indexURL: "https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/",
-      stdin: () => input.shift() ?? null,
-      stdout: (line) => output.push(line),
-      stderr: (line) => output.push(line),
+    const response = await fetch(`${API_BASE_URL}/classes/code/execute`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sourceCode: code, language, stdin }),
     });
-    const result = await pyodide.runPythonAsync(data.code);
-    if (result !== undefined && result !== null) output.push(String(result));
-    self.postMessage({ output: output.join("\\n") || "Program finished with no output." });
+    markBackendReachable();
+
+    const payload = (await response.json().catch(() => ({}))) as CompilerResponse;
+    if (!response.ok || !payload.result) {
+      throw new Error(payload.message || "The compiler could not execute this program.");
+    }
+
+    return payload.result;
   } catch (error) {
-    self.postMessage({ output: error && error.stack ? error.stack : String(error) });
+    if (isLikelyConnectivityError(error)) {
+      markBackendUnreachable();
+    }
+    throw error;
   }
 };
-`,
-    { code, stdin },
-    PYTHON_TIMEOUT_MS,
-  );
 
 const buildMarkupPreview = (code: string, language: string) => {
   if (language === "css") {
@@ -137,29 +94,30 @@ export async function runCode(
   const normalizedLanguage = normalizeProgrammingLanguage(language);
 
   try {
-    if (["javascript", "js"].includes(normalizedLanguage)) {
-      return { output: await runJavaScript(code, stdin) };
+    if (COMPILER_LANGUAGES.has(normalizedLanguage)) {
+      return await executeWithCompiler(code, normalizedLanguage, stdin);
     }
 
-    if (["typescript", "ts"].includes(normalizedLanguage)) {
-      return { output: await runJavaScript(code, stdin, true) };
-    }
-
-    if (["python", "py"].includes(normalizedLanguage)) {
-      return { output: await runPython(code, stdin) };
-    }
-
+    // Retain previews for older HTML/CSS activities, although new code
+    // activities are intentionally limited to the four compiler languages.
     if (["html", "css"].includes(normalizedLanguage)) {
       return {
         output: "Preview rendered successfully.",
         previewHtml: buildMarkupPreview(code, normalizedLanguage),
+        status: "Preview",
       };
     }
 
     return {
-      output: `${getProgrammingLanguageLabel(language)} requires an isolated compiler runtime that is not configured for this deployment. JavaScript, TypeScript-compatible JavaScript, Python, HTML, and CSS can run in the browser sandbox.`,
+      output:
+        `${getProgrammingLanguageLabel(language)} is not enabled in the compiler. ` +
+        "Supported languages are Java, JavaScript, Python, and Dart.",
+      status: "Unsupported language",
     };
   } catch (error) {
-    return { output: formatError(error) };
+    return {
+      output: formatError(error),
+      status: "Execution service error",
+    };
   }
 }

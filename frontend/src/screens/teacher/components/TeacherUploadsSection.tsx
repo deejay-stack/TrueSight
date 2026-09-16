@@ -267,7 +267,7 @@ export function TeacherUploadsSection({
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => onReject(request)}
+                          onClick={() => openViewer(request)}
                           disabled={request.status !== "pending" || reviewingId === request.id}
                         >
                           <X className="mr-2 h-4 w-4" />
@@ -335,7 +335,7 @@ export function TeacherUploadsSection({
                       className="w-full"
                       size="sm"
                       variant="destructive"
-                      onClick={() => onReject(request)}
+                      onClick={() => openViewer(request)}
                       disabled={request.status !== "pending" || reviewingId === request.id}
                     >
                       <X className="mr-2 h-4 w-4" />

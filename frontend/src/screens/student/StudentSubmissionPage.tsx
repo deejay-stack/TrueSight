@@ -14,7 +14,9 @@ import {
   FileUp,
   Image as ImageIcon,
   Loader2,
+  Play,
   Send,
+  Terminal,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -51,7 +53,10 @@ import {
 } from "../../utils/documentPreview";
 import { navigateBack } from "../../utils/navigation";
 import { CodeEditor } from "../../components/code/CodeEditor";
-import { getProgrammingLanguageLabel } from "../../utils/codeRunner";
+import {
+  getProgrammingLanguageLabel,
+  runCode,
+} from "../../utils/codeRunner";
 
 const formatDateTime = (value: string | null) => {
   if (!value) {
@@ -97,6 +102,10 @@ export default function StudentSubmissionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUnsubmitting, setIsUnsubmitting] = useState(false);
   const [unsubmitDialogOpen, setUnsubmitDialogOpen] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeOutput, setCodeOutput] = useState("");
+  const [codeRunSummary, setCodeRunSummary] = useState("");
+  const [isRunningCode, setIsRunningCode] = useState(false);
 
   const activity = detail?.activity ?? null;
   const submission = detail?.mySubmission ?? null;
@@ -120,6 +129,9 @@ export default function StudentSubmissionPage() {
             ? payload.activity.starterCode ?? ""
             : ""),
       );
+      setCodeInput("");
+      setCodeOutput("");
+      setCodeRunSummary("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load activity.";
       toast.error(message);
@@ -201,6 +213,45 @@ export default function StudentSubmissionPage() {
 
   const handleCodeChange = (value: string) => {
     setEssayContent(value);
+    setCodeOutput("");
+    setCodeRunSummary("");
+  };
+
+  const handleRunCode = async () => {
+    if (!activity || activity.submissionType !== "code" || !essayContent.trim()) {
+      return;
+    }
+    if (!online) {
+      toast.error("Internet access is required to run code.");
+      return;
+    }
+
+    setIsRunningCode(true);
+    setCodeOutput("Sending program to the compiler...");
+    setCodeRunSummary("");
+
+    try {
+      const result = await runCode(
+        essayContent,
+        activity.programmingLanguage,
+        codeInput,
+      );
+      setCodeOutput(result.output);
+      setCodeRunSummary(
+        [
+          result.status,
+          result.runtime,
+          result.executionTime ? `${result.executionTime}s` : "",
+          typeof result.memory === "number"
+            ? `${Math.round(result.memory / 1024)} MB`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
+    } finally {
+      setIsRunningCode(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -392,23 +443,39 @@ export default function StudentSubmissionPage() {
                           <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
                           {getProgrammingLanguageLabel(activity.programmingLanguage)} Submission
                         </label>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void handleSubmit()}
-                          disabled={isSubmitting || locked || !online || !essayContent.trim()}
-                        >
-                          {isSubmitting ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="mr-2 h-4 w-4" />
-                          )}
-                          {isSubmitting
-                            ? "Submitting..."
-                            : submission
-                              ? "Submit Changes"
-                              : "Submit Activity"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleRunCode()}
+                            disabled={isRunningCode || !online || !essayContent.trim()}
+                          >
+                            {isRunningCode ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Play className="mr-2 h-4 w-4" />
+                            )}
+                            {isRunningCode ? "Running..." : "Run Code"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void handleSubmit()}
+                            disabled={isSubmitting || locked || !online || !essayContent.trim()}
+                          >
+                            {isSubmitting ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="mr-2 h-4 w-4" />
+                            )}
+                            {isSubmitting
+                              ? "Submitting..."
+                              : submission
+                                ? "Submit Changes"
+                                : "Submit Activity"}
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="overflow-hidden rounded-lg bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)]">
@@ -422,6 +489,7 @@ export default function StudentSubmissionPage() {
                           onChange={handleCodeChange}
                           readOnly={locked}
                           minHeight={460}
+                          darkMode={darkMode}
                           ariaLabel={`${getProgrammingLanguageLabel(activity.programmingLanguage)} submission editor`}
                         />
                       </div>
@@ -429,6 +497,36 @@ export default function StudentSubmissionPage() {
                       <p className="text-xs theme-muted">
                         Brackets and parentheses close automatically. Use Tab to indent and Ctrl+Space to open code suggestions.
                       </p>
+
+                      <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.35fr)_minmax(0,1fr)]">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold uppercase theme-muted">
+                            Standard Input
+                          </label>
+                          <textarea
+                            value={codeInput}
+                            onChange={(event) => setCodeInput(event.target.value)}
+                            rows={5}
+                            spellCheck={false}
+                            placeholder="Optional input passed to the program"
+                            className="theme-ring h-36 w-full resize-none rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]"
+                          />
+                        </div>
+                        <div className="overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,black)]">
+                          <div className="flex h-9 items-center gap-2 border-b theme-border px-3 text-xs font-semibold text-[var(--app-text)]">
+                            <Terminal className="h-4 w-4 text-[var(--app-accent)]" />
+                            Program Output
+                            {codeRunSummary && (
+                              <span className="ml-auto truncate font-normal theme-muted">
+                                {codeRunSummary}
+                              </span>
+                            )}
+                          </div>
+                          <pre className="h-[106px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]">
+                            {codeOutput || "Run your code to inspect compiler and program output."}
+                          </pre>
+                        </div>
+                      </div>
                     </div>
                   ) : activity.submissionType === "essay" ? (
                     <div className="space-y-2">

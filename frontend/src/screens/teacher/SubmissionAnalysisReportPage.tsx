@@ -187,8 +187,9 @@ export default function SubmissionAnalysisReportPage() {
 
     setIsAnalyzing(true);
     try {
-      await analyzeSingleSubmission(submissionId);
-      toast.success("Analysis updated.");
+      const result = await analyzeSingleSubmission(submissionId);
+      if (result.analysisDetails?.analysisStatus === "failed") toast.error("AI detection temporarily unavailable.");
+      else toast.success("Analysis updated.");
       await loadSubmission();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to run analysis.";

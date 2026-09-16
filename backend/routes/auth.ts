@@ -170,13 +170,14 @@ router.post("/signup", async (req, res) => {
 
     await ensureUserPreferences(newUser.rows[0].id, true);
     const profile = await getUserProfileById(newUser.rows[0].id);
-    const token = generateToken(newUser.rows[0].id, normalizedRole);
-    res.cookie("token", token, cookieOptions);
+
+    // Creating an account is intentionally separate from signing in. Clear any
+    // stale session so the new user must authenticate through the login flow.
+    clearAuthCookie(res);
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully.",
-      token,
       user: profile,
     });
   } catch (error) {

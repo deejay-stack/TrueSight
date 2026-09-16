@@ -1420,10 +1420,10 @@ export async function analyzeSingleSubmission(
   };
 }
 
-export async function analyzeAllClassSubmissions(classId: string): Promise<number> {
-  const payload = await request<{ updated: number }>(`/${classId}/submissions/analyze`, {
+export async function analyzeAllClassSubmissions(classId: string): Promise<{ updated: number; failed: number }> {
+  const payload = await request<{ updated: number; failed?: number }>(`/${classId}/submissions/analyze`, {
     method: "POST",
   });
 
-  return Number(payload.updated ?? 0);
+  return { updated: Number(payload.updated ?? 0), failed: Number(payload.failed ?? 0) };
 }

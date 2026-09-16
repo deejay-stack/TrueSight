@@ -58,6 +58,9 @@ submissions.csv
 models/*.keras
 models/*.h5
 models/*.bin
+models/**/*.keras
+models/**/*.safetensors
+models/**/*.pt
 !models/labels.json
 backend/models/
 

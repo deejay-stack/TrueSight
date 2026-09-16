@@ -731,8 +731,9 @@ export default function TeacherScreen() {
     setIsAnalyzing(true);
 
     try {
-      const updated = await analyzeAllClassSubmissions(managedClass.id);
-      toast.success(`Analysis complete. ${updated} submissions processed.`);
+      const { updated, failed } = await analyzeAllClassSubmissions(managedClass.id);
+      if (failed) toast.error(`${updated} analyzed; ${failed} temporarily unavailable. Submissions preserved.`);
+      else toast.success(`Analysis complete. ${updated} submissions processed.`);
       await Promise.all([
         loadTeacherOverview(),
         loadTeacherAnalytics(),
@@ -769,7 +770,8 @@ export default function TeacherScreen() {
           ? ` (${result.confidenceScore.toFixed(2)}% confidence)`
           : "";
 
-      toast.success(`Submission analyzed${confidenceSuffix}.`);
+      if (result.analysisDetails?.analysisStatus === "failed") toast.error("AI detection temporarily unavailable.");
+      else toast.success(`Submission analyzed${confidenceSuffix}.`);
       await Promise.all([
         loadTeacherOverview(),
         loadTeacherAnalytics(),

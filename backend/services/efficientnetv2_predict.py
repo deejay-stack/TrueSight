@@ -116,13 +116,15 @@ def build_batch(image, np, config):
     return np.expand_dims(image_array, axis=0)
 
 
-def load_runtime(model_path, labels_path, warmup=True):
+def load_runtime(model_path, labels_path, warmup=True, config=None):
     if not os.path.isfile(model_path):
         fail(f"EfficientNetV2 model file was not found: {model_path}")
 
-    config = get_config()
+    config = config or get_config()
     labels = load_labels(labels_path)
     np, Image, ImageOps, UnidentifiedImageError, tf = load_dependencies()
+    for device in tf.config.list_physical_devices("GPU"):
+        tf.config.experimental.set_memory_growth(device, True)
     load_started = time.perf_counter()
 
     try:
@@ -216,13 +218,13 @@ def predict_image_bytes(runtime, image_bytes, config=None):
     prediction_ms = (time.perf_counter() - prediction_started) * 1000
     raw_values = np.asarray(prediction).reshape(-1)
 
-    if raw_values.size == 0:
-        raise RuntimeError("EfficientNetV2 model returned an empty prediction.")
+    if raw_values.size != 1:
+        raise RuntimeError("EfficientNetV2 model must return one sigmoid probability.")
 
     raw_probability = float(raw_values[0])
 
-    if not np.isfinite(raw_probability):
-        raise RuntimeError("EfficientNetV2 model returned a non-finite prediction probability.")
+    if not np.isfinite(raw_probability) or not 0.0 <= raw_probability <= 1.0:
+        raise RuntimeError("EfficientNetV2 model returned an invalid prediction probability.")
 
     probability = float(np.clip(raw_probability, 0.0, 1.0))
     label, model_label, confidence, human_probability, message = build_decision(
@@ -336,6 +338,9 @@ def run_worker(model_path, labels_path):
 
 def main():
     args = sys.argv[1:]
+    if args == ["--all-models"]:
+        run_all_models_worker()
+        return
     worker_mode = False
 
     if args and args[0] == "--worker":
@@ -352,6 +357,62 @@ def main():
         run_worker(model_path, labels_path)
     else:
         run_one_shot(model_path, labels_path)
+
+
+def run_all_models_worker():
+    """Extend the existing JSON-lines worker; one process, one copy per model."""
+    from contextlib import redirect_stdout
+    from local_detectors import MODELS, MODEL_NAMES, TextDetector, CodeDetector, normalize_result
+
+    runtimes = {}
+    health = {}
+    loaders = {
+        "text": TextDetector,
+        "code": CodeDetector,
+        "image": lambda: load_runtime(
+            str(MODELS / "image_detector" / "efficientnetv2_ai_human.keras"),
+            str(MODELS / "image_detector" / "labels.json"),
+            config=get_config(threshold=0.50, human_confident_max=0.50, ai_confident_min=0.50, input_scale="0_1"),
+        ),
+    }
+    for detector_type, loader in loaders.items():
+        print(f"[ai-model] Loading {MODEL_NAMES[detector_type]}", file=sys.stderr, flush=True)
+        try:
+            # Libraries must not corrupt the JSON-lines response stream.
+            with redirect_stdout(sys.stderr):
+                runtimes[detector_type] = loader()
+            health[detector_type] = {"loaded": True, "model": MODEL_NAMES[detector_type]}
+            print(f"[ai-model] Loaded {MODEL_NAMES[detector_type]}", file=sys.stderr, flush=True)
+        except (Exception, SystemExit) as error:
+            health[detector_type] = {"loaded": False, "model": MODEL_NAMES[detector_type]}
+            print(f"[ai-model] Failed to load {detector_type}: {error}", file=sys.stderr, flush=True)
+    print(json.dumps({"type": "ready", "models": health}), flush=True)
+
+    for line in sys.stdin:
+        request_id = None
+        try:
+            payload = json.loads(line)
+            request_id = payload.get("id")
+            detector_type = payload.get("detectorType")
+            if detector_type not in loaders:
+                raise ValueError("Unsupported detector type")
+            if detector_type not in runtimes:
+                raise RuntimeError("Requested model is unavailable")
+            with redirect_stdout(sys.stderr):
+                if detector_type == "image":
+                    image_bytes = base64.b64decode(payload["image"], validate=True)
+                    result = predict_image_bytes(runtimes["image"], image_bytes)
+                    result.update(normalize_result("image", result["aiProbability"], 0.50))
+                    # Strict > at 0.50, including the exact equality boundary.
+                    result["label"] = result["modelLabel"]
+                    result["message"] = "Likely AI-generated image." if result["predictedLabel"] == "AI" else "Likely human-created image."
+                else:
+                    result = runtimes[detector_type].predict(payload.get("text"))
+            print(f"[ai-inference] detector={detector_type} model={result['modelName']} label={result['predictedLabel']} threshold={result['threshold']}", file=sys.stderr, flush=True)
+            print(json.dumps({**result, "id": request_id}, allow_nan=False), flush=True)
+        except Exception as error:
+            print(f"[ai-inference] Request failed: {error}", file=sys.stderr, flush=True)
+            print(json.dumps({"id": request_id, "error": "AI detection temporarily unavailable."}), flush=True)
 
 
 if __name__ == "__main__":

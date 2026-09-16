@@ -82,7 +82,15 @@ const getSignupPath = (role: UserRole) => `/auth/${role}/signup`;
 
 export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
   const navigate = useNavigate();
-  const { signIn, signInWithGoogle, signUp, user, loading, darkMode } = useAuth();
+  const {
+    signIn,
+    signInWithGoogle,
+    signUp,
+    user,
+    loading,
+    sessionReady,
+    darkMode,
+  } = useAuth();
   const { online } = useNetworkStatus();
   const googleAuth = useGoogleAuthConfig();
   const config = roleConfig[role];
@@ -106,7 +114,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const googleClientConfigured = googleAuth.configured;
-  const isBusy = isSubmitting || isGoogleSubmitting || loading;
+  const isBusy = isSubmitting || isGoogleSubmitting || loading || !sessionReady;
   const actionDisabled = isBusy || !online;
   const isSignup = mode === "signup";
 
@@ -205,7 +213,10 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
     try {
       setIsSubmitting(true);
       await signUp(fullName.trim(), email.trim(), password, role);
-      toast.success("Account created. Welcome to TrueSight.");
+      navigate(getLoginPath(role), { replace: true });
+      toast.success("Account created successfully. Please log in.", {
+        duration: 3000,
+      });
     } catch (error) {
       setErrors({ general: getErrorMessage(error) });
     } finally {
