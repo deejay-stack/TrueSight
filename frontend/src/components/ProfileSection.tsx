@@ -84,7 +84,7 @@ export function ProfileSection({
         {/* Profile Photo Section */}
         <div className="flex flex-col items-center gap-4 py-4">
           <div className="relative group">
-            <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-3xl font-bold text-white shadow-[var(--app-shadow)]">
+            <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-3xl font-bold text-[var(--app-on-accent)] shadow-[var(--app-shadow)]">
               {profileImage ? (
                 <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
               ) : (
@@ -93,7 +93,7 @@ export function ProfileSection({
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="theme-ring absolute bottom-0 right-0 rounded-full bg-[var(--app-accent)] p-2 text-white shadow-[var(--app-shadow)] transition duration-200 hover:scale-105"
+              className="theme-ring absolute bottom-0 right-0 rounded-full bg-[var(--app-accent)] p-2 text-[var(--app-on-accent)] shadow-[var(--app-shadow)] transition duration-200 hover:scale-105"
             >
               <Camera className="w-4 h-4" />
             </button>
@@ -117,7 +117,7 @@ export function ProfileSection({
                 />
                 <button
                   onClick={handleSaveName}
-                  className="theme-ring rounded-lg bg-[var(--app-accent)] p-1.5 text-white transition-colors"
+                  className="theme-ring rounded-lg bg-[var(--app-accent)] p-1.5 text-[var(--app-on-accent)] transition-colors"
                 >
                   <Check className="w-4 h-4" />
                 </button>
@@ -206,7 +206,7 @@ export function ProfileSection({
               className="theme-ring flex w-full items-center justify-between rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-accent)_10%,var(--app-surface))] p-4 font-semibold text-[var(--app-accent)] transition-colors hover:bg-[color-mix(in_srgb,var(--app-accent)_16%,var(--app-surface))]"
             >
               <span>View Enrolled Students</span>
-              <span className="rounded-full bg-[var(--app-accent)] px-2.5 py-1 text-xs text-white">
+              <span className="rounded-full bg-[var(--app-accent)] px-2.5 py-1 text-xs text-[var(--app-on-accent)]">
                 {enrolledStudentsCount}
               </span>
             </button>

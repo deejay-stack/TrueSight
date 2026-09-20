@@ -21,7 +21,7 @@ export function AppLogo({
       <div
         className={[
           "relative grid shrink-0 place-items-center overflow-hidden rounded-2xl",
-          "bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-white shadow-[var(--app-shadow)]",
+          "bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-[var(--app-on-accent)] shadow-[var(--app-shadow)]",
           iconClassName || "h-12 w-12",
         ].join(" ")}
         aria-hidden="true"

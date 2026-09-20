@@ -1,6 +1,7 @@
 """Local text/code inference. Weights stay in the project's existing models directory."""
 import json
 import math
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -51,11 +52,19 @@ class TextDetector:
     def predict(self, text):
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Written content must not be empty")
-        inputs = self.tokenizer(text, truncation=True, max_length=512, padding=True, return_tensors="pt")
+        inputs = self.tokenizer(text, truncation=True, max_length=512, padding=True, return_tensors="pt", return_offsets_mapping=True)
+        offsets = inputs.pop("offset_mapping")[0].tolist()
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
         with self.torch.inference_mode():
             probabilities = self.torch.softmax(self.model(**inputs).logits, dim=-1)[0]
-        return normalize_result("text", float(probabilities[1].item()), self.threshold, float(probabilities[0].item()))
+        result = normalize_result("text", float(probabilities[1].item()), self.threshold, float(probabilities[0].item()))
+        try:
+            from text_explanations import explain_text
+            result["textExplanation"] = explain_text(self, text, inputs, offsets, result["aiProbability"])
+        except Exception as error:
+            print(f"[ai-explanation] Sentence analysis unavailable: {error}", file=sys.stderr, flush=True)
+            result["textExplanation"] = {"status": "unavailable", "message": "Sentence explanation could not be completed. The document score is still valid; run analysis again to retry."}
+        return result
 
 
 def build_code_model(torch, checkpoint):

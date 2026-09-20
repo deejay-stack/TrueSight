@@ -250,6 +250,7 @@ export const analyzeImage = async (fileDataUrl?: string | null, fileName?: strin
       rawOutput: prediction.rawOutput as number[],
     }),
     modelName: prediction.modelName, status: "completed", analysisStatus: "completed",
+    reasons: result.details.reasons,
     probabilities: result.details.probabilities,
     message: "Probabilities are guidance for teacher review, not proof of academic misconduct.",
   };

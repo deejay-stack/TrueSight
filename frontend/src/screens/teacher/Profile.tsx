@@ -83,7 +83,7 @@ export const Profile = () => {
                 </div>
                 <button
                   onClick={handlePhotoClick}
-                  className="absolute bottom-0 right-0 p-2 bg-[var(--app-accent)] text-white rounded-full shadow-lg hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] transition-colors transform translate-x-1 translate-y-1 group-hover:scale-110"
+                  className="absolute bottom-0 right-0 p-2 bg-[var(--app-accent)] text-[var(--app-on-accent)] rounded-full shadow-lg hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] transition-colors transform translate-x-1 translate-y-1 group-hover:scale-110"
                 >
                   <Camera className="w-4 h-4" />
                 </button>
@@ -136,7 +136,7 @@ export const Profile = () => {
             <button
               onClick={handleSaveProfile}
               disabled={isSaving || name === currentUser.name}
-              className="flex items-center space-x-2 px-6 py-2.5 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-lg font-medium transition-all active:scale-95 disabled:active:scale-100 shadow-sm hover:shadow"
+              className="flex items-center space-x-2 px-6 py-2.5 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] disabled:bg-slate-300 dark:disabled:bg-slate-700 text-[var(--app-on-accent)] rounded-lg font-medium transition-all active:scale-95 disabled:active:scale-100 shadow-sm hover:shadow"
             >
               {isSaving ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
               <span>Save Changes</span>

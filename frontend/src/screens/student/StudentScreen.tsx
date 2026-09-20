@@ -538,11 +538,12 @@ export default function StudentScreen() {
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        className="theme-surface rounded-3xl border border-dashed theme-border px-6 py-7 sm:px-8"
+        className="workspace-hero"
       >
-        <h1 className="theme-title text-3xl font-extrabold sm:text-4xl">TrueSight</h1>
+        <p className="design-eyebrow">YOUR STUDENT WORKSPACE</p>
+        <h1>Your next chapter starts here.</h1>
         <p className="mt-4 max-w-3xl text-base theme-muted sm:text-lg">
-          An AI-powered tool desgined for academic integrity in Buenavista Community College. Join your classes, view activities, and submit your work with confidence.
+          A little structure. More room to learn. Keep your classes, activities, and submissions together in one place.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -557,7 +558,7 @@ export default function StudentScreen() {
         </div>
       </motion.div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="workspace-stats grid gap-4 md:grid-cols-3">
         <motion.div whileHover={{ y: -4 }}>
           <Card className="theme-card transition-all">
             <CardContent className="p-5">
@@ -842,10 +843,11 @@ export default function StudentScreen() {
         onLogout={handleLogout}
       />
 
-      <header className="fixed left-0 right-0 top-0 z-10 h-20 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,transparent)] backdrop-blur-md md:left-20">
+      <header className="workspace-header fixed left-0 right-0 top-0 z-10 h-20 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,transparent)] backdrop-blur-md md:left-20">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
+              aria-label="Open navigation"
               onClick={() => setMobileSidebarOpen(true)}
               className="theme-ring inline-flex h-10 w-10 items-center justify-center rounded-xl border theme-border text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] md:hidden"
             >
@@ -888,7 +890,7 @@ export default function StudentScreen() {
       <main
         ref={mainScrollRef}
         data-route-scroll-container
-        className="fixed inset-x-0 bottom-0 top-20 overflow-y-auto px-4 py-6 pb-10 sm:px-6 md:left-20"
+        className="workspace-content fixed inset-x-0 bottom-0 top-20 overflow-y-auto px-4 py-6 pb-10 sm:px-6 md:left-20"
       >
         <div className="mx-auto max-w-6xl">
           {activeSection === "home" && renderHome()}

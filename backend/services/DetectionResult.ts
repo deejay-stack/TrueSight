@@ -15,6 +15,18 @@ export const toAnalysisResult = (result: ModelResult): AnalysisResult => {
   const isAIGenerated = result.predictedLabel === "AI";
   const confidenceScore = Math.max(aiProbability, humanProbability);
   const verdict = isAIGenerated ? "Likely AI-generated" : "Likely human-created";
+  const thresholdPercent = (result.threshold * 100).toFixed(result.detectorType === "text" ? 8 : 2);
+  const comparison = result.detectorType === "image" ? "greater than" : "greater than or equal to";
+  const reasons = [
+    `${result.modelName} returned ${(result.aiProbability * 100).toFixed(6)}% AI probability and ${(result.humanProbability * 100).toFixed(6)}% human probability.`,
+    `The frozen rule is AI when its unrounded probability is ${comparison} ${thresholdPercent}%. This submission ${isAIGenerated ? "meets" : "does not meet"} that rule, so its result is ${result.predictedLabel}.`,
+    result.detectorType === "text"
+      ? "DeBERTa evaluates up to 512 tokens, including special tokens. Sentence masking measures changes within that same context; it does not replace the original prediction."
+      : result.detectorType === "code"
+        ? "The CodeT5 tokenizer encodes up to 512 tokens. The trained bidirectional LSTM evaluates that sequence and a sigmoid converts its output to the AI score. This model does not identify which lines were authored by AI."
+        : "EfficientNetV2L evaluates the image after RGB conversion, 224×224 resizing, and the training rescale. Its single sigmoid output supplies the AI probability; it does not identify AI-generated image regions.",
+    "Confidence is the larger of the two model probabilities, not a separately measured probability that the verdict is correct. Review drafts, references, and the student's explanation alongside this result.",
+  ];
   return {
     aiProbability, humanProbability, confidenceScore, isAIGenerated,
     details: {
@@ -24,6 +36,12 @@ export const toAnalysisResult = (result: ModelResult): AnalysisResult => {
       threshold: result.threshold, aiProbability, humanProbability, confidenceScore,
       probabilities: { ai: result.aiProbability, human: result.humanProbability },
       aiPercentage: aiProbability, humanPercentage: humanProbability,
+      reasons,
+      ...(result.detectorType === "text" && result.textExplanation ? { textExplanation: result.textExplanation } : {}),
+      analysisTimeline: [
+        { label: "Local model inference", status: "complete", detail: result.modelName },
+        { label: "Frozen decision rule", status: "complete", detail: `AI probability ${comparison} ${thresholdPercent}%; returned ${result.predictedLabel}.` },
+      ],
       message: "Probabilities are guidance for teacher review, not proof of academic misconduct.",
       scoreCards: [
         { id: "aiProbability", label: "AI probability", value: aiProbability, unit: "%", tone: isAIGenerated ? "risk" : "calm" },

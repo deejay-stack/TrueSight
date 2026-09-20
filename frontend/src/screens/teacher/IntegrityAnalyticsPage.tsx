@@ -5,6 +5,7 @@ import {
   BarChart3,
   BookOpen,
   CalendarClock,
+  FileText,
   Home,
   RefreshCw,
   ShieldCheck,
@@ -39,6 +40,7 @@ import {
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "submissions", label: "Submissions", icon: FileText },
   { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
 ] as const;
@@ -299,7 +301,7 @@ export default function IntegrityAnalyticsPage() {
               <Card className="theme-card">
                 <CardContent className="space-y-1 p-4">
                   <div className="flex items-center gap-2 text-xs theme-muted">
-                    <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                    <ShieldCheck className="h-4 w-4 text-[var(--status-success)]" />
                     <span>Average integrity score</span>
                   </div>
                   <p className="text-2xl font-bold text-[var(--app-text)]">

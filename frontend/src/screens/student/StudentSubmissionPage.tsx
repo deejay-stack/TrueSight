@@ -427,7 +427,7 @@ export default function StudentSubmissionPage() {
                     Due {formatDateTime(activity.dueDate)}
                   </p>
                   {!online && (
-                    <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                    <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-[var(--status-warning)]">
                       You can review this activity while offline, but uploads and submissions are disabled.
                     </div>
                   )}
@@ -774,7 +774,7 @@ export default function StudentSubmissionPage() {
                       </AlertDialogTrigger>
                       <AlertDialogContent className="theme-card border theme-border bg-[var(--app-surface)] text-[var(--app-text)]">
                         <AlertDialogHeader className="items-center text-center sm:items-start sm:text-left">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 text-rose-300">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 text-[var(--status-danger)]">
                             <AlertTriangle className="h-6 w-6" />
                           </div>
                           <AlertDialogTitle>

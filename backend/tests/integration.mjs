@@ -100,12 +100,24 @@ sys.stdout.buffer.write(b.getvalue())
     const result = analyzed.submission;
     assert.equal(result.status, "analyzed", JSON.stringify(result.analysis_details));
     assert.equal(result.analysis_details.detectorType, expectedDetector);
+    assert.ok(result.analysis_details.reasons.length >= 4, "Detailed model rationale should be stored");
+    if (expectedDetector === "text") {
+      const explanation = result.analysis_details.textExplanation;
+      assert.equal(explanation.status, "completed");
+      assert.ok(explanation.sentences.length > 0);
+      assert.ok(explanation.sentences.length <= 16);
+      for (const sentence of explanation.sentences) {
+        assert.equal(explanation.analyzedText.slice(sentence.start, sentence.end), sentence.text);
+        assert.ok(Math.abs(sentence.impactPercentagePoints - (result.analysis_details.probabilities.ai - sentence.maskedAiProbability) * 100) < 1e-8);
+      }
+    }
     assert.equal(result.analysis_details.threshold, { text: 0.9913054109, code: 0.54, image: 0.5 }[expectedDetector]);
     const after = logs.join("").match(/\[ai-inference\] detector=/g)?.length ?? 0;
     assert.equal(after - before, 1, "Exactly one detector must run per submission");
     assert.ok(logs.join("").includes(`detector=${expectedDetector}`));
     const stored = await pool.query("SELECT ai_probability, is_ai_generated, analysis_details FROM submissions WHERE id=$1", [id]);
     assert.equal(Number(stored.rows[0].ai_probability), Number(result.ai_probability));
+    assert.deepEqual(stored.rows[0].analysis_details.textExplanation, result.analysis_details.textExplanation);
     const p = result.analysis_details.probabilities.ai;
     assert.equal(result.is_ai_generated, expectedDetector === "image" ? p > 0.5 : p >= result.analysis_details.threshold);
     const detail = await request(`/classes/submissions/${id}`, tokens.teacher);

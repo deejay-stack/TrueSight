@@ -111,3 +111,29 @@ These samples establish integration behavior, not evaluation accuracy.
 
 The old `scripts/test_image_model.py` is an experimental image-only utility;
 its threshold comparisons must not be used to change frozen production settings.
+
+## Sentence explanations and heatmaps
+
+Text analysis now includes `analysis_details.textExplanation`. After the original
+DeBERTa prediction, the same loaded model masks each of the first 16 passages in
+the evaluated 512-token context, in batches of two. The original score minus the
+masked score (in percentage points) measures local model sensitivity. These extra
+passes do not change the original score or its frozen classification threshold.
+Analysis takes longer because of the additional inference passes.
+
+The teacher submission and report pages show the evaluated excerpt, selectable
+sentence highlights, signed score changes, strongest positive contributions, and
+coverage limits. Positive influence is not a sentence-level AI probability or
+proof of authorship; negative influence is not proof of human authorship. Effects
+interact and must not be added together. Offsets use UTF-16 to preserve browser
+alignment for Unicode and repeated sentences. PDF/DOCX excerpts are retained with
+their analysis so document uploads can display the same evidence.
+
+Older stored results are preserved. Reanalyze them to generate sentence evidence.
+If explanation generation fails, the original document prediction remains valid
+and the UI offers reanalysis. Code and image results explain their score, input
+processing, decision rule, and limits; they do not invent line or pixel attribution.
+
+The app's `.dark` toggle now controls Tailwind dark variants. Shared status,
+button-label, and heatmap colors have light/dark palettes. Contrast tests check
+4.5:1 text contrast on the corresponding role surfaces and primary gradients.

@@ -181,7 +181,7 @@ export default function AboutTrueSightPage() {
                 key={step.title}
                 className="rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] p-4"
               >
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-accent)] text-sm font-bold text-white">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--app-accent)] text-sm font-bold text-[var(--app-on-accent)]">
                   {index + 1}
                 </span>
                 <h3 className="mt-3 font-semibold text-[var(--app-text)]">

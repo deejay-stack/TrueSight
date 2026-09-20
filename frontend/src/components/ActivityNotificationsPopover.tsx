@@ -161,9 +161,9 @@ export function ActivityNotificationsPopover({
                       ) : notification.type === "new_activity" ? (
                         <Sparkles className="h-4 w-4 text-[var(--app-accent)]" />
                       ) : notification.severity === "warning" ? (
-                        <TriangleAlert className="h-4 w-4 text-rose-300" />
+                        <TriangleAlert className="h-4 w-4 text-[var(--status-danger)]" />
                       ) : (
-                        <CalendarClock className="h-4 w-4 text-amber-300" />
+                        <CalendarClock className="h-4 w-4 text-[var(--status-warning)]" />
                       )}
                       <p className="text-xs font-semibold text-[var(--app-text)]">
                         {notification.title}
@@ -203,7 +203,7 @@ export function ActivityNotificationsPopover({
                             event.stopPropagation();
                             onDelete(notification.id);
                           }}
-                          className="theme-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--app-muted)] hover:bg-rose-500/10 hover:text-rose-300"
+                          className="theme-ring inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--app-muted)] hover:bg-rose-500/10 hover:text-[var(--status-danger)]"
                           aria-label="Delete notification"
                           title="Delete"
                         >

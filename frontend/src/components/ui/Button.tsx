@@ -15,10 +15,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Comp
         className={cn(
-          "theme-ring inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+          "ui-button theme-ring inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
           {
-            "bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-white shadow-[var(--app-shadow)] hover:translate-y-[-1px]": variant === "default",
-            "bg-rose-500 text-white shadow-[var(--app-shadow)] hover:bg-rose-600 hover:translate-y-[-1px]": variant === "destructive",
+            "bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] text-[var(--app-on-accent)] shadow-[var(--app-shadow)] hover:translate-y-[-1px]": variant === "default",
+            "bg-rose-700 text-white shadow-[var(--app-shadow)] hover:bg-rose-800 hover:translate-y-[-1px]": variant === "destructive",
             "border theme-border bg-[color-mix(in_srgb,var(--app-surface)_92%,transparent)] text-[var(--app-text)] hover:bg-[color-mix(in_srgb,var(--app-accent)_8%,var(--app-surface))]": variant === "outline",
             "bg-[color-mix(in_srgb,var(--app-accent)_14%,transparent)] text-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_20%,transparent)]": variant === "secondary",
             "text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] hover:text-[var(--app-text)]": variant === "ghost",

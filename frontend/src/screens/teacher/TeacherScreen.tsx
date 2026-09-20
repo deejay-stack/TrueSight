@@ -5,6 +5,7 @@ import {
   BookOpen,
   CalendarClock,
   ClipboardList,
+  FileText,
   Home,
   Menu,
   Upload,
@@ -66,6 +67,7 @@ import { TeacherSettingsPanel } from "./components/TeacherSettingsPanel";
 import { TeacherHomeSection } from "./components/TeacherHomeSection";
 import { TeacherClassesSection } from "./components/TeacherClassesSection";
 import { TeacherStudentsSection } from "./components/TeacherStudentsSection";
+import { TeacherSubmissionsSection } from "./components/TeacherSubmissionsSection";
 import { TeacherActivitiesSection } from "./components/TeacherActivitiesSection";
 import { TeacherUpcomingSection } from "./components/TeacherUpcomingSection";
 import { TeacherUploadsSection } from "./components/TeacherUploadsSection";
@@ -106,6 +108,7 @@ const SIDEBAR_ITEMS = [
   { key: "students", label: "Students", icon: Users },
   { key: "uploads", label: "Uploads", icon: Upload },
   { key: "activities", label: "Activities", icon: ClipboardList },
+  { key: "submissions", label: "Submissions", icon: FileText },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
 ] as const;
 
@@ -119,6 +122,7 @@ const VALID_SECTIONS: Section[] = [
   "students",
   "uploads",
   "activities",
+  "submissions",
   "upcoming",
   "settings",
   "about",
@@ -130,6 +134,7 @@ const SECTION_LABELS: Record<Section, string> = {
   students: "Students",
   uploads: "Uploads",
   activities: "Activities",
+  submissions: "Submissions",
   upcoming: "Upcoming",
   settings: "Settings",
   about: "About",
@@ -891,10 +896,11 @@ export default function TeacherScreen() {
         onLogout={handleLogout}
       />
 
-      <header className="fixed left-0 right-0 top-0 z-10 h-20 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,transparent)] backdrop-blur-md md:left-20">
+      <header className="workspace-header fixed left-0 right-0 top-0 z-10 h-20 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,transparent)] backdrop-blur-md md:left-20">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
+              aria-label="Open navigation"
               onClick={() => setMobileSidebarOpen(true)}
               className="theme-ring inline-flex h-10 w-10 items-center justify-center rounded-xl border theme-border text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] md:hidden"
             >
@@ -943,7 +949,7 @@ export default function TeacherScreen() {
       <main
         ref={mainScrollRef}
         data-route-scroll-container
-        className="fixed inset-x-0 bottom-0 top-20 overflow-y-auto px-4 py-6 pb-10 sm:px-6 md:left-20"
+        className="workspace-content fixed inset-x-0 bottom-0 top-20 overflow-y-auto px-4 py-6 pb-10 sm:px-6 md:left-20"
       >
         <div className="mx-auto max-w-6xl">
           {activeSection === "home" && (
@@ -972,6 +978,15 @@ export default function TeacherScreen() {
               onCreateClass={openCreateClassModal}
               onCopyCode={(code) => void handleCopyCode(code)}
               onManageClass={(classroom) => void openClassManager(classroom)}
+            />
+          )}
+
+          {activeSection === "submissions" && (
+            <TeacherSubmissionsSection
+              classes={classes}
+              isLoadingClasses={isLoadingOverview}
+              online={online}
+              onAnalyzed={() => { void Promise.all([loadTeacherAnalytics(), loadNotifications()]); }}
             />
           )}
 

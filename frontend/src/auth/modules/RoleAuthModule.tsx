@@ -21,6 +21,8 @@ import { useAuth } from "../../context/useAuth";
 import { useGoogleAuthConfig } from "../../context/GoogleAuthProvider";
 import { useNetworkStatus } from "../../context/NetworkStatusContext";
 import type { UserRole } from "../../context/auth-types";
+import { IntegrityIllustration } from "../../components/IntegrityIllustration";
+import { GlobalThemeToggle } from "../../components/theme/GlobalThemeToggle";
 import { AppLogo } from "../../components/AppLogo";
 import { getRoleThemeStyle, roleThemes } from "../../theme/roleThemes";
 
@@ -253,9 +255,17 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
       style={moduleStyle}
     >
       <div className="auth-grid-effect pointer-events-none absolute inset-0" />
-      <div className="relative mx-auto grid min-h-screen w-full max-w-6xl place-items-center px-5 py-8 sm:px-6">
+      <div className="absolute right-4 top-4 z-10"><GlobalThemeToggle className="h-10 w-10" /></div>
+      <div className="auth-layout relative mx-auto min-h-screen w-full max-w-6xl px-5 py-12 sm:px-8">
+        <section className="auth-story">
+          <AppLogo />
+          <h1>Great work starts<br />with a <span className="design-gradient-text">clear view.</span></h1>
+          <p>A shared space for learning, thoughtful feedback, and academic integrity. Welcome to your TrueSight workspace.</p>
+          <IntegrityIllustration compact />
+          <p className="design-eyebrow mt-6">BUENAVISTA COMMUNITY COLLEGE</p>
+        </section>
         <motion.div
-          className="theme-surface mx-auto w-full max-w-md rounded-3xl p-6 sm:p-7"
+          className="auth-form-panel theme-surface mx-auto w-full max-w-md p-6 sm:p-8"
           initial={{ opacity: 0, y: 26, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.48, ease: "easeOut" }}
@@ -275,7 +285,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
               className={[
                 "theme-ring flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold",
                 role === "student"
-                  ? "bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] text-white shadow-[var(--app-shadow)]"
+                  ? "bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] text-[var(--app-on-accent)] shadow-[var(--app-shadow)]"
                   : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
               ].join(" ")}
             >
@@ -288,7 +298,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
               className={[
                 "theme-ring flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold",
                 role === "teacher"
-                  ? "bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] text-white shadow-[var(--app-shadow)]"
+                  ? "bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] text-[var(--app-on-accent)] shadow-[var(--app-shadow)]"
                   : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
               ].join(" ")}
             >
@@ -322,7 +332,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
                   />
                 </div>
                 {touched.fullName && validationErrors.fullName && (
-                  <p className="mt-1.5 text-xs text-rose-400">{validationErrors.fullName}</p>
+                  <p className="mt-1.5 text-xs text-[var(--status-danger)]">{validationErrors.fullName}</p>
                 )}
               </motion.div>
             )}
@@ -346,7 +356,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
                 />
               </div>
               {touched.email && validationErrors.email && (
-                <p className="mt-1.5 text-xs text-rose-400">{validationErrors.email}</p>
+                <p className="mt-1.5 text-xs text-[var(--status-danger)]">{validationErrors.email}</p>
               )}
             </div>
 
@@ -377,7 +387,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
                 </button>
               </div>
               {touched.password && validationErrors.password && (
-                <p className="mt-1.5 text-xs text-rose-400">{validationErrors.password}</p>
+                <p className="mt-1.5 text-xs text-[var(--status-danger)]">{validationErrors.password}</p>
               )}
             </div>
 
@@ -419,7 +429,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
                   </button>
                 </div>
                 {touched.confirmPassword && validationErrors.confirmPassword && (
-                  <p className="mt-1.5 text-xs text-rose-400">
+                  <p className="mt-1.5 text-xs text-[var(--status-danger)]">
                     {validationErrors.confirmPassword}
                   </p>
                 )}
@@ -427,13 +437,13 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
             )}
 
             {errors.general && (
-              <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-[var(--status-danger)]">
                 {errors.general}
               </div>
             )}
 
             {!online && (
-              <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-[var(--status-warning)]">
                 Login and signup require an internet connection.
               </div>
             )}
@@ -442,7 +452,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
               type="button"
               onClick={isSignup ? handleSignup : handleLogin}
               disabled={actionDisabled}
-              className="theme-ring flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] px-4 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:translate-y-[-1px] hover:shadow-[var(--app-shadow)] disabled:cursor-not-allowed disabled:opacity-65"
+              className="theme-ring flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,var(--auth-accent),var(--auth-accent-2))] px-4 py-2.5 text-sm font-semibold text-[var(--app-on-accent)] transition-transform duration-200 hover:translate-y-[-1px] hover:shadow-[var(--app-shadow)] disabled:cursor-not-allowed disabled:opacity-65"
             >
               {isBusy ? (
                 <>
@@ -488,7 +498,7 @@ export default function RoleAuthModule({ mode, role }: RoleAuthModuleProps) {
                       />
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-[var(--status-warning)]">
                       {googleAuth.message}
                     </div>
                   )}

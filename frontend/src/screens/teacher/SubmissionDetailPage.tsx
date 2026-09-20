@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -39,6 +39,8 @@ import {
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
 import { CodeEditor } from "../../components/code/CodeEditor";
+import { AIExplainabilityPanel } from "./components/AIExplainabilityPanel";
+import { TextEvidencePanel } from "./components/TextEvidencePanel";
 import {
   getProgrammingLanguageLabel,
   runCode,
@@ -51,6 +53,7 @@ import {
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "submissions", label: "Submissions", icon: FileText },
   { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
 ] as const;
@@ -392,7 +395,7 @@ export default function SubmissionDetailPage() {
         items={[...SIDEBAR_ITEMS]}
         footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
         footerLabel={SUPPORT_SIDEBAR_LABEL}
-        activeSection={"classes" as TeacherSection}
+        activeSection={"submissions" as TeacherSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(section) => navigate(`/teacher/teacher_screen/${section}`)}
         onCloseMobile={() => setMobileSidebarOpen(false)}
@@ -755,6 +758,9 @@ export default function SubmissionDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <AIExplainabilityPanel details={submission.analysisDetails} />
+            <TextEvidencePanel key={submission.updatedAt} details={submission.analysisDetails} />
 
             <Card className="theme-card">
               <CardContent className="space-y-4 p-5">

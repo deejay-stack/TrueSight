@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookOpen, ScanLine, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { IntegrityIllustration } from "../components/IntegrityIllustration";
+import { GlobalThemeToggle } from "../components/theme/GlobalThemeToggle";
 import { AppLogo } from "../components/AppLogo";
 import { useAuth } from "../context/useAuth";
 import { getRoleThemeStyle } from "../theme/roleThemes";
@@ -14,60 +16,32 @@ export default function LoginScreen() {
   };
 
   return (
-    <main
-      className="role-theme-page relative min-h-screen overflow-hidden text-[var(--app-text)]"
-      style={getRoleThemeStyle("student", darkMode)}
-    >
-      <div className="auth-grid-effect pointer-events-none absolute inset-0 opacity-60" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--app-accent)_14%,transparent),transparent)]" />
-      <div className="pointer-events-none absolute bottom-0 left-1/2 h-72 w-[min(720px,90vw)] -translate-x-1/2 rounded-full bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] blur-3xl" />
-
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-5 sm:px-6">
-        <nav className="flex items-center justify-between">
+    <main className="landing-page role-theme-page relative min-h-screen overflow-hidden text-[var(--app-text)]" style={getRoleThemeStyle("student", darkMode)}>
+      <div className="landing-frame">
+        <nav className="landing-nav" aria-label="Main navigation">
           <AppLogo />
+          <span className="design-eyebrow hidden md:block">Built for learning. Designed for trust.</span>
+          <div className="flex shrink-0 items-center gap-2"><GlobalThemeToggle className="h-10 w-10" /><button type="button" onClick={goToAuth} aria-label="Get started" className="design-nav-button theme-ring"><span className="hidden min-[360px]:inline">Get started</span><ArrowRight className="h-4 w-4" /></button></div>
         </nav>
-
-        <section className="grid flex-1 place-items-center py-14 sm:py-18">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
-            className="mx-auto max-w-4xl text-center"
-          >
-            <div className="mx-auto inline-flex items-center gap-2 rounded-full border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--app-accent)] shadow-[var(--app-shadow)]">
-              <ShieldCheck className="h-4 w-4" />
-              Buenavista Community College
+        <section className="landing-hero">
+          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="landing-copy">
+            <div className="design-eyebrow flex items-center gap-2"><span className="integrity-dot" />BUENAVISTA COMMUNITY COLLEGE</div>
+            <h1>A clearer view.<br /><span className="design-gradient-text">A stronger learning<br className="hidden sm:block" /> community.</span></h1>
+            <p className="landing-description">Your classes, submissions, and academic integrity insights. Together in one thoughtful workspace.</p>
+            <div className="mt-8 flex flex-wrap items-center gap-5">
+              <button type="button" onClick={goToAuth} className="design-primary theme-ring">Explore TrueSight <ArrowRight className="h-4 w-4" /></button>
+              <span className="text-sm theme-muted">For teachers &amp; students</span>
             </div>
-
-            <h1 className="mt-7 text-4xl font-extrabold leading-tight text-[var(--app-text)] sm:text-5xl lg:text-6xl">
-              TrueSight: AI-Assisted Learning Management System for Buenavista Community
-              College
-            </h1>
-
-            <p className="mx-auto mt-6 max-w-3xl text-base leading-7 theme-muted sm:text-lg">
-              An LMS designed to support teachers and
-              students in managing academic submissions
-              and promoting academic integrity through AI-assisted text and
-              image analysis.
-            </p>
-
-            <div className="mt-9 flex justify-center">
-              <button
-                type="button"
-                onClick={goToAuth}
-                className="theme-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,var(--app-accent),var(--app-accent-2))] px-7 text-sm font-bold text-white shadow-[var(--app-shadow)] transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                Get Started
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="mx-auto mt-6 max-w-xl text-sm leading-6 theme-muted">
-              Built for classroom submissions, teacher review, and responsible
-              AI-assisted academic integrity support.
-            </p>
+            <p className="mt-8 flex items-center gap-2 text-xs theme-muted"><ShieldCheck className="h-4 w-4 shrink-0" />AI-assisted insight. Teacher-led decisions.</p>
           </motion.div>
+          <IntegrityIllustration />
         </section>
+        <section className="landing-features" aria-label="The TrueSight workspace">
+          <article><span className="design-eyebrow">01 / CONNECT</span><BookOpen className="design-feature-icon" /><h2>Your classroom, connected.</h2><p>Keep classes, activities, and deadlines in view, so you can focus on the work that matters.</p></article>
+          <article><span className="design-eyebrow">02 / UNDERSTAND</span><ScanLine className="design-feature-icon" /><h2>Go beyond a percentage.</h2><p>Explore AI-assisted text, code, and image analysis with explanations that support thoughtful review.</p></article>
+          <article><span className="design-eyebrow">03 / GUIDE</span><ShieldCheck className="design-feature-icon" /><h2>Make room for context.</h2><p>Review submissions, share feedback, and support academic integrity with human judgment at the center.</p></article>
+        </section>
+        <footer className="landing-footer"><span>TrueSight <span className="theme-muted">/ Classroom Integrity</span></span><span className="theme-muted">An AI-assisted learning management system</span></footer>
       </div>
     </main>
   );

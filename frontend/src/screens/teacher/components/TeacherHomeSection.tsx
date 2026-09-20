@@ -36,9 +36,10 @@ export function TeacherHomeSection({
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        className="theme-surface rounded-3xl border border-dashed theme-border px-6 py-7 sm:px-8"
+        className="workspace-hero"
       >
-        <h1 className="theme-title text-3xl font-extrabold sm:text-4xl">TrueSight</h1>
+        <p className="design-eyebrow">YOUR TEACHING WORKSPACE</p>
+        <h1>A clear view of your classroom.</h1>
         <p className="mt-4 max-w-3xl text-base theme-muted sm:text-lg">
           Manage your classes, students, activities, and upcoming deadlines from one
           dashboard.
@@ -95,7 +96,7 @@ export function TeacherHomeSection({
         </div>
       </motion.div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="workspace-stats grid gap-4 md:grid-cols-4">
         <motion.div whileHover={{ y: -4 }}>
           <Card className="theme-card">
             <CardContent className="p-5">

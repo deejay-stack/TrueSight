@@ -9,39 +9,6 @@ type AIExplainabilityPanelProps = {
   details: SubmissionAnalysisDetails | null;
 };
 
-type RequiredSignal = {
-  id: string;
-  label: string;
-  fallbackExplanation: string;
-};
-
-const REQUIRED_SIGNALS: RequiredSignal[] = [
-  {
-    id: "repetitivePhrasing",
-    label: "Repetitive phrasing",
-    fallbackExplanation:
-      "Vocabulary reuse and repeated expressions can be generated-text indicators.",
-  },
-  {
-    id: "roboticStructure",
-    label: "Robotic structure",
-    fallbackExplanation:
-      "Very uniform sentence form and length can indicate machine-like structure.",
-  },
-  {
-    id: "unnaturalTransitions",
-    label: "Unnatural transitions",
-    fallbackExplanation:
-      "Abrupt or template-like flow between ideas can signal generated writing.",
-  },
-  {
-    id: "overPerfectGrammar",
-    label: "Over-perfect grammar",
-    fallbackExplanation:
-      "Exceptionally polished grammar with limited natural variation may be suspicious.",
-  },
-];
-
 const asNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -115,35 +82,6 @@ const getBarTone = (score: number): string => {
 
 export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
   const parsedSignals = parseSignals(details?.explainabilitySignals);
-  if ((typeof details?.modelName === "string" || details?.analysisStatus === "failed") && parsedSignals.length === 0) {
-    return (
-      <Card className="theme-card">
-        <CardContent className="space-y-2 p-5">
-          <h3 className="text-lg font-semibold text-[var(--app-text)]">AI Explainability</h3>
-          <p className="text-sm theme-muted">
-            Sentence, token, and writing-style explanations are unavailable for this analysis.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-  const signalById = new Map(parsedSignals.map((signal) => [signal.id, signal]));
-
-  const mergedSignals = REQUIRED_SIGNALS.map((required) => {
-    const existing = signalById.get(required.id);
-
-    if (existing) {
-      return existing;
-    }
-
-    return {
-      id: required.id,
-      label: required.label,
-      score: 0,
-      explanation: required.fallbackExplanation,
-    };
-  });
-
   const reasons = Array.isArray(details?.reasons)
     ? details.reasons.map((reason) => String(reason))
     : [];
@@ -155,7 +93,7 @@ export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
           <div>
             <h3 className="text-lg font-semibold text-[var(--app-text)]">AI Explainability</h3>
             <p className="text-sm theme-muted">
-              Signal-based reasoning that explains why this output was flagged.
+              How the model score, decision rule, and available evidence produced this result.
             </p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--app-accent)_16%,transparent)] px-3 py-1 text-xs font-semibold text-[var(--app-accent)]">
@@ -165,7 +103,7 @@ export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          {mergedSignals.map((signal) => (
+          {parsedSignals.map((signal) => (
             <div
               key={signal.id}
               className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3"
@@ -199,16 +137,16 @@ export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
         <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
           <div className="mb-2 flex items-center gap-2">
             {reasons.length > 0 ? (
-              <AlertTriangle className="h-4 w-4 text-amber-300" />
+              <AlertTriangle className="h-4 w-4 text-[var(--status-warning)]" />
             ) : (
-              <Check className="h-4 w-4 text-emerald-300" />
+              <Check className="h-4 w-4 text-[var(--status-success)]" />
             )}
             <p className="text-sm font-semibold text-[var(--app-text)]">Model rationale</p>
           </div>
 
           {reasons.length === 0 ? (
             <p className="text-sm theme-muted">
-              No additional rationale was returned for this analysis run.
+              This saved result has no detailed rationale. Run analysis again to generate the model decision explanation.
             </p>
           ) : (
             <div className="space-y-2">

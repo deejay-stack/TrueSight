@@ -60,7 +60,7 @@ export const Dashboard = () => {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="mt-4 sm:mt-0 flex items-center space-x-2 px-5 py-2.5 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
+          className="mt-4 sm:mt-0 flex items-center space-x-2 px-5 py-2.5 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-[var(--app-on-accent)] rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
         >
           <Plus className="w-5 h-5" />
           <span>{isTeacher ? 'Create Class' : 'Join Class'}</span>
@@ -183,7 +183,7 @@ export const Dashboard = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-white rounded-lg font-medium transition"
+                  className="px-4 py-2 bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-[var(--app-on-accent)] rounded-lg font-medium transition"
                 >
                   {isTeacher ? 'Create' : 'Join'}
                 </button>

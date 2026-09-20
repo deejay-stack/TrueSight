@@ -652,7 +652,7 @@ export function MultiLevelAIDetectionPanel({
         )}
 
         <div className="flex flex-wrap gap-2 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_80%,transparent)] p-2">
-          {tabs.map((tab) => {
+          {tabs.filter((tab) => !(detectorType === "text" && details?.textExplanation && (tab.id === "evidence" || tab.id === "tokens"))).map((tab) => {
             const Icon = tab.icon;
             const selected = activeView === tab.id;
 
@@ -664,7 +664,7 @@ export function MultiLevelAIDetectionPanel({
                 className={[
                   "inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition",
                   selected
-                    ? "bg-[var(--app-accent)] text-white"
+                    ? "bg-[var(--app-accent)] text-[var(--app-on-accent)]"
                     : "text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] hover:text-[var(--app-text)]",
                 ].join(" ")}
               >
@@ -747,16 +747,16 @@ export function MultiLevelAIDetectionPanel({
                   <p className="text-xs theme-muted">Interpretation</p>
                 </div>
                 <p className="mt-1 text-sm text-[var(--app-text)]">
-                  Confidence level indicates how strongly the available signals support
-                  the AI probability estimate.
+                  Confidence is the larger class probability. The returned verdict
+                  uses the model-specific threshold, not the confidence label.
                 </p>
               </div>
               <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
                 <div className="flex items-center gap-2">
                   {humanRevisionLikelihood !== null && humanRevisionLikelihood >= 55 ? (
-                    <UserRoundCheck className="h-4 w-4 text-emerald-300" />
+                    <UserRoundCheck className="h-4 w-4 text-[var(--status-success)]" />
                   ) : (
-                    <AlertTriangle className="h-4 w-4 text-amber-300" />
+                    <AlertTriangle className="h-4 w-4 text-[var(--status-warning)]" />
                   )}
                   <p className="text-xs theme-muted">Review Hint</p>
                 </div>
@@ -765,7 +765,7 @@ export function MultiLevelAIDetectionPanel({
                     ? "Image results should be reviewed alongside the uploaded image and assignment context."
                     : humanRevisionLikelihood !== null && humanRevisionLikelihood >= 55
                       ? "Higher human-revision likelihood suggests manual editing signs are present."
-                      : "Lower human-revision likelihood suggests fewer manual editing markers."}
+                      : "Review drafts, sources, and the student's explanation. This model does not measure revision history."}
                 </p>
               </div>
             </div>

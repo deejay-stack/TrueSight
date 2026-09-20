@@ -22,14 +22,14 @@ const getIntegrityTone = (score: number | null): string => {
   }
 
   if (score >= 75) {
-    return "text-emerald-300";
+    return "text-[var(--status-success)]";
   }
 
   if (score >= 55) {
-    return "text-amber-300";
+    return "text-[var(--status-warning)]";
   }
 
-  return "text-rose-300";
+  return "text-[var(--status-danger)]";
 };
 
 export function TeacherIntegrityAnalyticsDashboard({
@@ -96,7 +96,7 @@ export function TeacherIntegrityAnalyticsDashboard({
         <Card className="theme-card">
           <CardContent className="space-y-1 p-4">
             <div className="flex items-center gap-2 text-xs theme-muted">
-              <AlertTriangle className="h-4 w-4 text-amber-300" />
+              <AlertTriangle className="h-4 w-4 text-[var(--status-warning)]" />
               <span>Flagged outputs</span>
             </div>
             <p className="text-2xl font-bold text-[var(--app-text)]">
@@ -108,7 +108,7 @@ export function TeacherIntegrityAnalyticsDashboard({
         <Card className="theme-card">
           <CardContent className="space-y-1 p-4">
             <div className="flex items-center gap-2 text-xs theme-muted">
-              <ShieldCheck className="h-4 w-4 text-emerald-300" />
+              <ShieldCheck className="h-4 w-4 text-[var(--status-success)]" />
               <span>Average integrity score</span>
             </div>
             <p

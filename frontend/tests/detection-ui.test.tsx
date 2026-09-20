@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MultiLevelAIDetectionPanel } from "../src/screens/teacher/components/MultiLevelAIDetectionPanel";
 import { AIExplainabilityPanel } from "../src/screens/teacher/components/AIExplainabilityPanel";
+import { TextEvidencePanel } from "../src/screens/teacher/components/TextEvidencePanel";
 import type { ClassSubmission } from "../src/services/classService";
 import { toAnalysisResult, failedAnalysis } from "../../backend/services/DetectionResult";
 
@@ -23,8 +24,37 @@ test("teacher cards display 98% AI, 2% human, and the returned HUMAN decision", 
   assert.match(html, /DeBERTa-v3-base V3/);
   assert.match(html, /Detector: text/);
   const explanations = renderToStaticMarkup(<AIExplainabilityPanel details={result.details} />);
-  assert.match(explanations, /explanations are unavailable/);
-  assert.doesNotMatch(explanations, /0%/);
+  assert.match(explanations, /does not meet/);
+  assert.match(explanations, /99\.13054109%/);
+  assert.doesNotMatch(explanations, /Repetitive phrasing|Over-perfect grammar/);
+});
+
+test("sentence heatmap handles Unicode, signed impact, and duplicate passages", () => {
+  const text = "🙂 Hello. Hello.";
+  const explanation = {
+    status: "completed", method: "sentence_occlusion", analyzedText: text,
+    sentences: [
+      { sentenceNumber: 1, start: 0, end: 9, text: "🙂 Hello.", impactPercentagePoints: 12, maskedAiProbability: 0.86 },
+      { sentenceNumber: 2, start: 10, end: 16, text: "Hello.", impactPercentagePoints: -1, maskedAiProbability: 0.99 },
+    ], evaluatedTokens: 9, availableSentences: 2, truncated: true,
+    summary: "Sentence masking", limitations: ["Not proof of authorship."],
+  };
+  const html = renderToStaticMarkup(<TextEvidencePanel details={{ detectorType: "text", textExplanation: explanation }} />);
+  assert.match(html, /heatmap-impact-strong/);
+  assert.match(html, /heatmap-impact-negative/);
+  assert.match(html, /86\.0000%/);
+  assert.match(html, /only the evaluated excerpt/);
+  assert.match(html, /not proof/);
+  const invalid = { ...explanation, sentences: [{ ...explanation.sentences[0], start: 1 }] };
+  const unavailable = renderToStaticMarkup(<TextEvidencePanel details={{ detectorType: "text", textExplanation: invalid }} />);
+  assert.match(unavailable, /Sentence evidence is unavailable/);
+  assert.doesNotMatch(unavailable, /heatmap-passage/);
+});
+
+test("older results request reanalysis without inventing highlights", () => {
+  const html = renderToStaticMarkup(<TextEvidencePanel details={{ detectorType: "text" }} />);
+  assert.match(html, /Run Analyze submission again/);
+  assert.doesNotMatch(html, /heatmap-passage/);
 });
 
 test("failed analysis renders an unavailable message without fabricated score cards", () => {

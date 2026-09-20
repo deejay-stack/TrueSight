@@ -16,7 +16,7 @@ export function GlobalThemeToggle({ className = "" }: GlobalThemeToggleProps) {
       onClick={toggleTheme}
       aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
       className={[
-        "theme-ring inline-flex h-12 w-12 items-center justify-center rounded-full",
+        "theme-ring inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
         "border theme-border transition-all duration-200",
         "bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)]",
         "text-[var(--app-accent)] shadow-[var(--app-shadow)]",

@@ -249,7 +249,7 @@ export const ClassDetail = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-sm font-medium bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-white rounded-lg shadow-sm hover:shadow transition-all active:scale-95"
+                  className="px-5 py-2.5 text-sm font-medium bg-[var(--app-accent)] hover:bg-[color-mix(in_srgb,var(--app-accent)_88%,black)] text-[var(--app-on-accent)] rounded-lg shadow-sm hover:shadow transition-all active:scale-95"
                 >
                   Publish Assignment
                 </button>

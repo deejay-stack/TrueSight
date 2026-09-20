@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BookOpen,
   CalendarClock,
+  FileText,
   Home,
   Loader2,
   Menu,
@@ -27,6 +28,7 @@ import {
   type PreviewDocument,
 } from "./services/teacherClassroomService";
 import { AIExplainabilityPanel } from "./components/AIExplainabilityPanel";
+import { TextEvidencePanel } from "./components/TextEvidencePanel";
 import { MultiLevelAIDetectionPanel } from "./components/MultiLevelAIDetectionPanel";
 import {
   TeacherSidebar,
@@ -41,6 +43,7 @@ import {
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "submissions", label: "Submissions", icon: FileText },
   { key: "uploads", label: "Uploads", icon: Upload },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
 ] as const;
@@ -211,7 +214,7 @@ export default function SubmissionAnalysisReportPage() {
         items={[...SIDEBAR_ITEMS]}
         footerItems={[...SUPPORT_SIDEBAR_ITEMS]}
         footerLabel={SUPPORT_SIDEBAR_LABEL}
-        activeSection={"classes" as TeacherSection}
+        activeSection={"submissions" as TeacherSection}
         mobileOpen={mobileSidebarOpen}
         onSelect={(section) => navigate(`/teacher/teacher_screen/${section}`)}
         onCloseMobile={() => setMobileSidebarOpen(false)}
@@ -332,6 +335,7 @@ export default function SubmissionAnalysisReportPage() {
             />
 
             <AIExplainabilityPanel details={details} />
+            <TextEvidencePanel key={submission.updatedAt} details={details} />
 
             <Card className="theme-card">
               <CardContent className="space-y-3 p-5">

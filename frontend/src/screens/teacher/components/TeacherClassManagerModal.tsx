@@ -9,6 +9,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
 import { Input } from "../../../components/ui/Input";
@@ -154,6 +155,12 @@ export function TeacherClassManagerModal({
   onChangeActivityForm,
   onToggleSubmission,
 }: TeacherClassManagerModalProps) {
+  const [studentSearch, setStudentSearch] = useState({ classId: "", query: "" });
+  const studentQuery = studentSearch.classId === classroom?.id ? studentSearch.query : "";
+  const normalizedQuery = studentQuery.trim().toLocaleLowerCase();
+  const visibleStudents = students.filter((student) =>
+    `${student.name} ${student.email}`.toLocaleLowerCase().includes(normalizedQuery),
+  ).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.email.localeCompare(b.email));
   const imageSubmissions = submissions.filter(isImageSubmission);
   const currentImageIndex =
     analyzingSubmissionId && imageSubmissions.length > 0
@@ -492,12 +499,18 @@ export function TeacherClassManagerModal({
                   <Card className="theme-card order-4">
                     <CardContent className="space-y-3 p-5">
                       <h4 className="text-lg font-semibold text-[var(--app-text)]">Enrolled Students</h4>
+                      <label htmlFor="class-student-search" className="block text-sm theme-muted">Search students by name or email</label>
+                      <Input id="class-student-search" type="search" placeholder="Search students..."
+                        value={studentQuery} onChange={(event) => setStudentSearch({ classId: classroom.id, query: event.target.value })} />
+                      <p className="text-xs theme-muted">{visibleStudents.length} of {students.length} students · Name A–Z</p>
 
                       {students.length === 0 ? (
                         <p className="text-sm theme-muted">No enrolled students yet.</p>
+                      ) : visibleStudents.length === 0 ? (
+                        <p className="text-sm theme-muted">No students match your search.</p>
                       ) : (
                         <div className="space-y-2">
-                          {students.map((student) => (
+                          {visibleStudents.map((student) => (
                             <div
                               key={student.id}
                               className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] p-3"

@@ -50,9 +50,11 @@ function SidebarNav({
         return (
           <button
             key={item.key}
+            aria-current={active ? "page" : undefined}
+            title={item.label}
             onClick={() => onSelect(item.key)}
             className={[
-              "theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm",
+              "workspace-nav-item theme-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm",
               "transition-all duration-200",
               active
                 ? "bg-[color-mix(in_srgb,var(--app-accent)_16%,transparent)] text-[var(--app-accent)]"
@@ -151,7 +153,7 @@ export function StudentSidebar({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={[
-          "theme-surface fixed left-0 top-0 z-20 hidden h-screen flex-col px-3 py-4 md:flex",
+          "workspace-sidebar workspace-sidebar-desktop theme-surface fixed left-0 top-0 z-20 hidden h-screen flex-col px-3 py-4 md:flex",
           "transition-all duration-300",
           hovered ? "w-72" : "w-20",
         ].join(" ")}
@@ -206,7 +208,7 @@ export function StudentSidebar({
           )}
 
           <LogoutConfirmationDialog onConfirm={onLogout}>
-            <button className="theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-rose-400 transition-all duration-200 hover:bg-rose-500/10">
+            <button className="theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--status-danger)] transition-all duration-200 hover:bg-rose-500/10">
               <LogOut className="h-4 w-4 shrink-0" />
               <span
                 className={[
@@ -229,6 +231,7 @@ export function StudentSidebar({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={onCloseMobile}
+              aria-label="Close navigation"
               className="fixed inset-0 z-40 bg-[var(--sidebar-backdrop)] md:hidden"
             />
             <motion.aside
@@ -236,12 +239,13 @@ export function StudentSidebar({
               animate={{ x: 0 }}
               exit={{ x: -300 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              className="theme-surface fixed left-0 top-0 z-50 flex h-screen w-72 flex-col px-4 py-4 md:hidden"
+              className="workspace-sidebar theme-surface fixed left-0 top-0 z-50 flex h-screen w-72 flex-col px-4 py-4 md:hidden"
             >
               <div className="flex items-center justify-between">
                 <AppLogo iconClassName="h-11 w-11 rounded-2xl" />
                 <button
                   onClick={onCloseMobile}
+                  aria-label="Close navigation"
                   className="theme-ring inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)]"
                 >
                   <X className="h-5 w-5" />
@@ -295,7 +299,7 @@ export function StudentSidebar({
                     onCloseMobile();
                   }}
                 >
-                  <button className="theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-rose-400 transition-all duration-200 hover:bg-rose-500/10">
+                  <button className="theme-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--status-danger)] transition-all duration-200 hover:bg-rose-500/10">
                     <LogOut className="h-4 w-4 shrink-0" />
                     <span>Logout</span>
                   </button>
