@@ -2,6 +2,8 @@
 
 AI-powered academic integrity management system for classroom submissions. The app lets students submit text, documents, and images, while teachers review AI-detection results, class activity, and submission history.
 
+See [official subject curriculum, department/year enrollment rules, setup, and test results](docs/subject-curriculum-enrollment.md) for the current enrollment policy. [Analysis corrections, evaluation results, and defense demo](docs/enrollment-cor-analysis-fixes.md) remain documented separately.
+
 ## Stack
 
 - Frontend: React, TypeScript, Vite
@@ -24,6 +26,8 @@ Teacher analysis actions, saved submissions, and existing probability cards are
 preserved. Failed analysis keeps submissions pending with null scores.
 
 See [local detector setup, architecture, and tests](docs/local-detector-integration.md).
+
+See [LMS rubrics, rating exports, enrollment setup, and verification](docs/lms-enhancements.md) for the integrated classroom enhancements. Official student and class grade-level assignments are required for new enrollment.
 
 ## Project Structure
 
@@ -71,12 +75,22 @@ JWT_SECRET=replace_me
 # Optional when the default python executable is not the TensorFlow environment.
 PYTHON_EXECUTABLE=C:\Path\To\TrueSight\.venv\Scripts\python.exe
 
-# Sandboxed compiler API for Java, JavaScript, Python, and Dart.
-# The default is Judge0's development endpoint. Configure a self-hosted or
-# managed Judge0-compatible endpoint for production deployments.
-CODE_EXECUTION_API_URL=https://ce.judge0.com
+# Optional dedicated compiler API. Execution stays disabled until the deployment
+# is reviewed against provider/deployment evidence and an approval file is configured.
+CODE_EXECUTION_API_URL=
+# CODE_EXECUTION_APPROVAL_FILE=C:/path/to/verified-sandbox.json
 # CODE_EXECUTION_API_KEY=replace_me
 # CODE_EXECUTION_API_KEY_HEADER=X-Auth-Token
+# For a managed RapidAPI endpoint, use X-RapidAPI-Key above and its API host:
+# CODE_EXECUTION_API_HOST=your-api-host-from-the-dashboard
+
+# Managed OnlineCompiler alternative (reuse the key saved in backend/.env):
+# CODE_EXECUTION_PROVIDER=onlinecompiler
+# CODE_EXECUTION_API_URL=https://api.onlinecompiler.io/api/judge0
+# CODE_EXECUTION_API_KEY_HEADER=Authorization
+# ONLINE_COMPILER_API_KEY=replace_me
+# CODE_EXECUTION_APPROVAL_FILE=C:/path/to/Capstone/backend/code-sandbox-approval.local.json
+# See docs/managed-code-sandbox.md for verified deployment status and fixed limits.
 
 # Worker startup / inference timeouts. Thresholds come from frozen model settings.
 AI_STARTUP_TIMEOUT_MS=600000
@@ -86,6 +100,8 @@ AI_INFERENCE_TIMEOUT_MS=120000
 ```
 
 ## Backend Setup
+
+Programming editor, diagnostic, draft and sandbox setup details: [Code workbench](docs/code-workbench.md).
 
 ```powershell
 python -m venv .venv

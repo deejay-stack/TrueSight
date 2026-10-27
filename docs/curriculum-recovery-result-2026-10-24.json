@@ -1,0 +1,318 @@
+{
+  "applied": true,
+  "completedAt": "2026-10-24T05:41:46.532Z",
+  "preserved": 4,
+  "restored": 27,
+  "entries": [
+    {
+      "code": "ITF101",
+      "name": "Introduction to Computing",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 240,
+      "assignmentId": 235,
+      "result": "restored"
+    },
+    {
+      "code": "CP1",
+      "name": "Computer Programming 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 241,
+      "assignmentId": 236,
+      "result": "restored"
+    },
+    {
+      "code": "GE1",
+      "name": "Mathematics in the Modern World",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 242,
+      "assignmentId": 237,
+      "result": "restored"
+    },
+    {
+      "code": "GE2",
+      "name": "Understanding the Self",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 243,
+      "assignmentId": 238,
+      "result": "restored"
+    },
+    {
+      "code": "PE1",
+      "name": "Physical Education 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 244,
+      "assignmentId": 239,
+      "result": "restored"
+    },
+    {
+      "code": "OPT1",
+      "name": "Office Productivity Tools 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 245,
+      "assignmentId": 240,
+      "result": "restored"
+    },
+    {
+      "code": "CSS1",
+      "name": "Computer Systems Servicing 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 246,
+      "assignmentId": 241,
+      "result": "restored"
+    },
+    {
+      "code": "GE3",
+      "name": "Purposive Communication",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 247,
+      "assignmentId": 242,
+      "result": "restored"
+    },
+    {
+      "code": "GUIDANCE 1",
+      "name": "Adjustment to College Life/ Emotional Intelligence",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 248,
+      "assignmentId": 243,
+      "result": "restored"
+    },
+    {
+      "code": "NSTP 1",
+      "name": "National Service Training Program 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 1,
+      "semester": 1,
+      "subjectId": 108,
+      "assignmentId": 104,
+      "result": "preserved"
+    },
+    {
+      "code": "CP3",
+      "name": "Data Structure  1",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 249,
+      "assignmentId": 244,
+      "result": "restored"
+    },
+    {
+      "code": "DLD1",
+      "name": "Digital Logic Design",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 250,
+      "assignmentId": 245,
+      "result": "restored"
+    },
+    {
+      "code": "PT1",
+      "name": "Platform Technologies 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 251,
+      "assignmentId": 246,
+      "result": "restored"
+    },
+    {
+      "code": "GE6",
+      "name": "Art Appreciation",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 252,
+      "assignmentId": 247,
+      "result": "restored"
+    },
+    {
+      "code": "OOP1",
+      "name": "Object Oriented Programming 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 253,
+      "assignmentId": 248,
+      "result": "restored"
+    },
+    {
+      "code": "GE7",
+      "name": "Reading Visual Art",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 254,
+      "assignmentId": 249,
+      "result": "restored"
+    },
+    {
+      "code": "ADV101",
+      "name": "Application Development and Emerging Technologies 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 255,
+      "assignmentId": 250,
+      "result": "restored"
+    },
+    {
+      "code": "PE3",
+      "name": "Physical Education 3",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 256,
+      "assignmentId": 251,
+      "result": "restored"
+    },
+    {
+      "code": "DA101",
+      "name": "Database Administration",
+      "departmentCode": "BSIT",
+      "yearLevel": 2,
+      "semester": 1,
+      "subjectId": 109,
+      "assignmentId": 105,
+      "result": "preserved"
+    },
+    {
+      "code": "CP5",
+      "name": "Event-Driven Programming",
+      "departmentCode": "BSIT",
+      "yearLevel": 3,
+      "semester": 1,
+      "subjectId": 257,
+      "assignmentId": 252,
+      "result": "restored"
+    },
+    {
+      "code": "IAS1",
+      "name": "Information Assurance and Security",
+      "departmentCode": "BSIT",
+      "yearLevel": 3,
+      "semester": 1,
+      "subjectId": 258,
+      "assignmentId": 253,
+      "result": "restored"
+    },
+    {
+      "code": "ITPE1",
+      "name": "Emerging Web Dev Tools 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 3,
+      "semester": 1,
+      "subjectId": 259,
+      "assignmentId": 254,
+      "result": "restored"
+    },
+    {
+      "code": "RM101",
+      "name": "Research Methods",
+      "departmentCode": "BSIT",
+      "yearLevel": 3,
+      "semester": 1,
+      "subjectId": 112,
+      "assignmentId": 106,
+      "result": "preserved"
+    },
+    {
+      "code": "CAP101",
+      "name": "Capstone Project 1",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 260,
+      "assignmentId": 255,
+      "result": "restored"
+    },
+    {
+      "code": "CAP102",
+      "name": "Capstone Project 2",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 261,
+      "assignmentId": 256,
+      "result": "restored"
+    },
+    {
+      "code": "SA101",
+      "name": "System Administration and Maintenance",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 262,
+      "assignmentId": 257,
+      "result": "restored"
+    },
+    {
+      "code": "IPT1",
+      "name": "Integrative Programming and Technologies",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 263,
+      "assignmentId": 258,
+      "result": "restored"
+    },
+    {
+      "code": "ITPE3",
+      "name": "Emerging Web Dev Tools 2",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 264,
+      "assignmentId": 259,
+      "result": "restored"
+    },
+    {
+      "code": "GE9",
+      "name": "Ethics",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 265,
+      "assignmentId": 260,
+      "result": "restored"
+    },
+    {
+      "code": "GE10",
+      "name": "Life and Works of Rizal",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 266,
+      "assignmentId": 261,
+      "result": "restored"
+    },
+    {
+      "code": "OJT",
+      "name": "Practicum",
+      "departmentCode": "BSIT",
+      "yearLevel": 4,
+      "semester": 1,
+      "subjectId": 113,
+      "assignmentId": 107,
+      "result": "preserved"
+    }
+  ]
+}

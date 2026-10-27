@@ -1,4 +1,15 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { readEnrollmentDraft, saveEnrollmentDraft } from "../../utils/enrollmentDraft";
+import type { AcademicSelection } from "../../components/AcademicSelectors";
+import { semesterLabel } from "../../utils/curriculum";
+import { enrollmentFlow } from "../../utils/enrollmentFlow";
+import { useEnrollmentCatalog } from "../../hooks/useEnrollmentCatalog";
+import { lmsRequest } from "../../services/lmsService";
+import { sendAcademicCorToTeacher } from '../../services/academicEnrollmentService';
+import { AuthorizedDocumentPreview } from "../../components/documents/AuthorizedDocumentPreview";
+import { EligibleSubjects } from "./components/EligibleSubjects";
+import { DocumentPreview } from "../../components/documents/DocumentPreview";
+import { WorkspaceArtwork } from "../../components/WorkspaceArtwork";
+import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { motion } from "framer-motion";
 import {
@@ -22,6 +33,7 @@ import { Card, CardContent } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { GlobalThemeToggle } from "../../components/theme/GlobalThemeToggle";
 import { ActivityNotificationsPopover } from "../../components/ActivityNotificationsPopover";
+import { notificationTarget } from '../../utils/notificationTarget';
 import { AppLogo } from "../../components/AppLogo";
 import { DashboardSkeleton } from "../../components/DashboardSkeleton";
 import { useAuth } from "../../context/useAuth";
@@ -145,7 +157,15 @@ export default function StudentScreen() {
   const [activities, setActivities] = useState<ClassActivity[]>([]);
   const [isLoadingActivities, setIsLoadingActivities] = useState(false);
 
+  const joinGeneration = useRef(0);
+  const draftTouched = useRef(false);
   const [joinCode, setJoinCode] = useState("");
+  const [joinSection, setJoinSection] = useState("");
+  const [joinSemester, setJoinSemester] = useState(1);
+  const { catalog: enrollmentCatalog,error: enrollmentCatalogError,refresh: refreshEnrollmentCatalog } = useEnrollmentCatalog();
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const [joinAcademics, setJoinAcademics] = useState<AcademicSelection>({ departmentCode: "", yearLevel: 0 });
   const [isJoining, setIsJoining] = useState(false);
   const [joinLookup, setJoinLookup] = useState<ClassJoinLookup | null>(null);
   const [corUpload, setCorUpload] = useState<PreparedFileUpload | null>(null);
@@ -294,19 +314,14 @@ export default function StudentScreen() {
   };
 
   const handleOpenNotification = async (notification: ActivityNotification) => {
-    if (!notification.activityId) {
-      toast.error("This notification is not linked to an activity.");
-      return;
-    }
-
     if (notification.status === "unread") {
       void handleMarkNotificationRead(notification.id);
     }
 
     setNotificationsOpen(false);
-    navigate(
-      `/student/classes/${notification.classId}/activities/${notification.activityId}`,
-    );
+    const target=notificationTarget('student',notification);
+    if(target)navigate(target);
+    if(notification.type==='enrollment_review')void Promise.all([loadEnrollmentRequests(),loadEnrolledClasses(),refreshEnrollmentCatalog()]);
   };
 
   useEffect(() => {
@@ -362,6 +377,7 @@ export default function StudentScreen() {
 
   useEffect(() => {
     const activeJoinCode = joinLookup?.classroom.code;
+    let active = true;
     let lastRefreshAt = 0;
 
     const refreshEnrollmentState = () => {
@@ -376,13 +392,14 @@ export default function StudentScreen() {
       ]);
 
       if (activeJoinCode) {
+        const generation = joinGeneration.current;
         void lookupClassByCode(activeJoinCode)
-          .then((lookup) => setJoinLookup(lookup))
+          .then((lookup) => { if (active && generation === joinGeneration.current) setJoinLookup(lookup); })
           .catch(() => undefined);
       }
     };
 
-    const timer = window.setInterval(refreshEnrollmentState, 30_000);
+    const timer = window.setInterval(refreshEnrollmentState, 5_000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -394,6 +411,7 @@ export default function StudentScreen() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      active = false;
       window.clearInterval(timer);
       window.removeEventListener("focus", refreshEnrollmentState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -413,7 +431,22 @@ export default function StudentScreen() {
     mainScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [activeSection, selectedClassId]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    readEnrollmentDraft(String(user.id)).then(draft => {
+      if (active && draft && !draftTouched.current) { setJoinCode(draft.code); setJoinAcademics(draft.academics); setJoinSection(draft.section); setJoinSemester(draft.semester === 2 ? 2 : 1); setCorUpload(draft.upload); }
+    }).catch(() => { if (active) setDraftError('This browser could not restore an enrollment draft. Submitted requests and COR files remain saved on the server.'); }).finally(() => { if (active) setDraftReady(true); });
+    return () => { active = false; };
+  }, [user?.id]);
+  useEffect(() => {
+    if (!draftReady || !user?.id) return;
+    const timer = window.setTimeout(() => { void saveEnrollmentDraft(String(user.id), { code: joinCode, academics: joinAcademics, section: joinSection, semester:joinSemester, upload: corUpload }).then(() => setDraftError('')).catch(() => setDraftError('This browser could not save your draft. Keep this page open until your request is submitted.')); }, 0);
+    return () => clearTimeout(timer);
+  }, [draftReady, user?.id, joinCode, joinAcademics, joinSection, joinSemester, corUpload]);
+
   const handleValidateClassCode = async () => {
+    if (isJoining) return;
     if (!online) {
       toast.error("Internet access is required to validate a class code.");
       return;
@@ -424,10 +457,12 @@ export default function StudentScreen() {
       return;
     }
 
+    draftTouched.current = true;
     setIsJoining(true);
-
+    const generation = ++joinGeneration.current;
     try {
       const lookup = await lookupClassByCode(joinCode.trim());
+      if (generation !== joinGeneration.current) return;
       setJoinLookup(lookup);
 
       if (lookup.enrollment) {
@@ -442,20 +477,27 @@ export default function StudentScreen() {
         return;
       }
 
-      toast.success("Class code verified. Upload your COR to request enrollment.");
+      const flow=enrollmentFlow({catalog:enrollmentCatalog,selection:joinAcademics,section:joinSection,semester:joinSemester,code:joinCode,lookup});
+      if(flow.mode==='blocked')toast.error(flow.message);
+      else toast.success('The subject matches your academic selection. You can submit your COR for teacher approval.');
     } catch (error) {
+      if (generation !== joinGeneration.current) return;
       const message =
         error instanceof Error ? error.message : "Unable to validate class code.";
       toast.error(message);
       setJoinLookup(null);
     } finally {
-      setIsJoining(false);
+      if (generation === joinGeneration.current) setIsJoining(false);
     }
   };
 
+  const corFlow = enrollmentFlow({ catalog:enrollmentCatalog,selection:joinAcademics,section:joinSection,semester:joinSemester,code:joinCode,lookup:joinLookup });
+  const canSubmitClassCor = corFlow.mode === 'class-request';
+
   const handleSelectCor = async (file: File | undefined) => {
     if (!file) return;
-
+    if (!corFlow.canUpload || isJoining || isPreparingCor) { toast.error(corFlow.message); return; }
+    draftTouched.current = true;
     setIsPreparingCor(true);
     setCorUploadProgress(0);
 
@@ -471,7 +513,6 @@ export default function StudentScreen() {
       const message =
         error instanceof Error ? error.message : "Unable to prepare COR image.";
       toast.error(message);
-      setCorUpload(null);
       setCorUploadProgress(0);
     } finally {
       setIsPreparingCor(false);
@@ -479,46 +520,84 @@ export default function StudentScreen() {
   };
 
   const handleSubmitEnrollmentRequest = async () => {
+    if (isJoining || isPreparingCor) return;
     if (!online) {
       toast.error("Internet access is required to submit an enrollment request.");
       return;
     }
 
-    if (!joinLookup) {
-      toast.error("Validate a class code first.");
+    if (!joinLookup || joinLookup.classroom.code.toUpperCase() !== joinCode.trim().toUpperCase()) {
+      toast.error("Validate the current class code first.");
       return;
     }
+
+    if (!canSubmitClassCor) { toast.error(joinLookup.eligibilityMessage || 'This class is not eligible for enrollment with your confirmed academic information.'); return; }
 
     if (!corUpload) {
       toast.error("Please upload your COR image.");
       return;
     }
 
+    draftTouched.current = true;
+    let generation = ++joinGeneration.current;
+    const verifiedLookup = joinLookup;
     setIsJoining(true);
 
     try {
-      await submitEnrollmentRequest({
+      const savedRequest = await submitEnrollmentRequest({
         code: joinLookup.classroom.code,
+        ...joinAcademics,
+        semester:joinSemester,
+        section: joinSection,
         corFileName: corUpload.fileName,
         corFileType: corUpload.fileType,
         corFileSize: corUpload.fileSize,
         corDataUrl: corUpload.fileDataUrl,
       });
-      toast.success("Enrollment request submitted.");
-      setJoinCode("");
-      setJoinLookup(null);
-      setCorUpload(null);
-      setCorUploadProgress(0);
-      await Promise.all([loadEnrollmentRequests(), loadNotifications()]);
+      if (generation === joinGeneration.current) {
+        generation = ++joinGeneration.current; // Discard lookups issued before the save committed.
+        setJoinLookup({ ...verifiedLookup,request:{ id:savedRequest.id,status:savedRequest.status,rejectionNote:savedRequest.rejectionNote,submittedAt:savedRequest.submittedAt,reviewedAt:savedRequest.reviewedAt } });
+      }
+      toast.success("Enrollment request and COR saved and sent to your class teacher.");
+      void lookupClassByCode(verifiedLookup.classroom.code).then(lookup => { if (generation === joinGeneration.current) setJoinLookup(lookup); }).catch(() => {});
+      void Promise.all([loadEnrollmentRequests(), loadNotifications(), refreshEnrollmentCatalog()]);
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Unable to submit enrollment request.";
       toast.error(message);
+      void lookupClassByCode(verifiedLookup.classroom.code).then(lookup => { if (generation === joinGeneration.current) setJoinLookup(lookup); }).catch(() => {});
     } finally {
-      setIsJoining(false);
+      if (generation === joinGeneration.current) setIsJoining(false);
     }
+  };
+
+  const handleSubmitAcademicCor = async () => {
+    if (isJoining || isPreparingCor) return;
+    if (!online) { toast.error('Internet access is required to submit academic verification.'); return; }
+    if (!corUpload || !corFlow.canUpload || !['academic-request','academic-attachment'].includes(corFlow.mode)) { toast.error(corFlow.message); return; }
+    draftTouched.current = true;
+    setIsJoining(true);
+    try {
+      const cor = { fileName:corUpload.fileName,fileType:corUpload.fileType,fileSize:corUpload.fileSize,fileDataUrl:corUpload.fileDataUrl };
+      const payload={...joinAcademics,section:joinSection,code:joinCode.trim(),semester:joinSemester,forClassEnrollment:true,cor};
+      let recipient:import('../../services/academicEnrollmentService').AcademicClassRecipient|null;
+      if (corFlow.mode === 'academic-attachment' && corFlow.pending) {
+        recipient=(await lmsRequest<{recipient:typeof recipient}>(`/academic/verification-requests/${corFlow.pending.id}/cor`,payload)).recipient;
+      } else recipient=(await lmsRequest<{recipient:typeof recipient}>('/academic/verification-requests',payload,'POST')).recipient;
+      toast.success(`COR submitted to ${recipient?.teacherName||'your teacher'} for enrollment approval.`);
+      await refreshEnrollmentCatalog();
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Unable to save academic verification.'); await refreshEnrollmentCatalog(); }
+    finally { setIsJoining(false); }
+  };
+
+  const handleSendSavedAcademicCor = async () => {
+    if(isJoining||!online||!corFlow.pending||!joinCode.trim())return;
+    setIsJoining(true);
+    try {const recipient=await sendAcademicCorToTeacher(corFlow.pending.id,joinCode.trim(),joinSemester);toast.success(`Saved COR sent to ${recipient.teacherName} for enrollment approval.`);await refreshEnrollmentCatalog();}
+    catch(e){toast.error(e instanceof Error?e.message:'Unable to route the saved COR.');}
+    finally{setIsJoining(false);}
   };
 
   const handleLogout = async () => {
@@ -538,24 +617,27 @@ export default function StudentScreen() {
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        className="workspace-hero"
+        className="workspace-hero workspace-hero-illustrated"
       >
-        <p className="design-eyebrow">YOUR STUDENT WORKSPACE</p>
-        <h1>Your next chapter starts here.</h1>
-        <p className="mt-4 max-w-3xl text-base theme-muted sm:text-lg">
-          A little structure. More room to learn. Keep your classes, activities, and submissions together in one place.
-        </p>
+        <div className="workspace-hero-copy">
+          <p className="design-eyebrow">YOUR STUDENT WORKSPACE</p>
+          <h1>Your next chapter starts here.</h1>
+          <p className="mt-4 max-w-3xl text-base theme-muted sm:text-lg">
+            A little structure. More room to learn. Keep your classes, activities, and submissions together in one place.
+          </p>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={() => goToSection("enrolled")}>
-            <BookOpen className="mr-2 h-4 w-4" />
-            Open Enrolled
-          </Button>
-          <Button variant="outline" onClick={() => joinInputRef.current?.focus()}>
-            <Sparkles className="mr-2 h-4 w-4" />
-            Join New Class
-          </Button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button onClick={() => goToSection("enrolled")}>
+              <BookOpen className="mr-2 h-4 w-4" />
+              Open Enrolled
+            </Button>
+            <Button variant="outline" onClick={() => joinInputRef.current?.focus()}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Join New Class
+            </Button>
+          </div>
         </div>
+        <WorkspaceArtwork />
       </motion.div>
 
       <div className="workspace-stats grid gap-4 md:grid-cols-3">
@@ -598,23 +680,33 @@ export default function StudentScreen() {
               Request Class Enrollment
             </p>
             <p className="text-xs theme-muted">
-              Enter a valid class code, upload your COR, then wait for teacher approval.
+              Confirm your academic details and semester, verify a class code, then submit your COR for the required review.
             </p>
           </div>
+          <EligibleSubjects
+            catalog={enrollmentCatalog} error={enrollmentCatalogError} busy={isJoining}
+            selection={joinAcademics} semester={joinSemester}
+            onSelectionChange={value => { joinGeneration.current++; draftTouched.current=true; setJoinAcademics(value); setJoinLookup(null); }}
+            onSemesterChange={value => { joinGeneration.current++; draftTouched.current=true; setJoinSemester(value); }}
+            onRefresh={() => { void refreshEnrollmentCatalog(); }}
+            onOpenSettings={() => goToSection('settings')}
+            onSelect={code => { joinGeneration.current++; draftTouched.current=true; setJoinCode(code); setJoinLookup(null); joinInputRef.current?.focus(); }}
+          />
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
               ref={joinInputRef}
+              aria-label="Class code"
+              disabled={isJoining}
               value={joinCode}
               onChange={(event) => {
+                joinGeneration.current++; draftTouched.current = true;
                 setJoinCode(event.target.value.toUpperCase());
                 setJoinLookup(null);
-                setCorUpload(null);
-                setCorUploadProgress(0);
               }}
               placeholder="e.g. ABC123-XY4"
               className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
             />
-            <Button onClick={handleValidateClassCode} disabled={isJoining || !online} title={!online ? "Internet access is required." : undefined}>
+            <Button onClick={handleValidateClassCode} disabled={isJoining || !online || !joinCode.trim()} title={!online ? "Internet access is required." : undefined}>
               {isJoining ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -633,7 +725,7 @@ export default function StudentScreen() {
                     {joinLookup.classroom.name}
                   </p>
                   <p className="text-xs theme-muted">
-                    Code: {joinLookup.classroom.code}
+                    Code: {joinLookup.classroom.code} · Department: {joinLookup.classroom.departmentCode || "Not assigned"} / Year level: {joinLookup.classroom.yearLevel || "Not assigned"}
                   </p>
                 </div>
                 <div>
@@ -661,23 +753,35 @@ export default function StudentScreen() {
                 </div>
               )}
 
-              {joinLookup.request?.status !== "pending" && (
-                <>
-                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] px-4 py-6 text-center transition hover:border-[var(--app-accent)]">
+              {corFlow.mode==='blocked' && <div role="alert" className="space-y-1 text-sm"><p className="font-semibold">Subject Enrollment Restricted</p><p>{corFlow.message}</p></div>}
+              <p className="text-sm">Official subject: {joinLookup.classroom.subjectCode || 'Not configured'} — {joinLookup.classroom.subjectName || 'Curriculum review required'}</p>
+              <p className="text-sm">{semesterLabel(joinLookup.classroom.semester ?? 1)}</p>
+
+            </div>
+          )}
+          <div className="space-y-3" aria-label="Certificate of Registration upload and enrollment submission">
+            <p className="text-sm">Student Full Name: {studentName}</p>
+            <label className="block text-sm">Section (if assigned)<Input aria-label="Enrollment section" maxLength={120} value={joinSection} disabled={isJoining} onChange={e => { draftTouched.current = true; setJoinSection(e.target.value); }} placeholder="Your registration section" /></label>
+            {draftError && <p role="status" className="text-xs theme-muted">{draftError}</p>}
+            <h3 className="text-sm font-semibold">COR for class enrollment review</h3>
+            <p role="status" className="text-sm theme-muted">{corFlow.message}</p>
+
+                  <label htmlFor="student-enrollment-cor" aria-disabled={!corFlow.canUpload || isJoining || isPreparingCor} className={`flex flex-col items-center justify-center rounded-2xl border border-dashed theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] px-4 py-6 text-center transition ${corFlow.canUpload && !isJoining && !isPreparingCor ? 'cursor-pointer hover:border-[var(--app-accent)]' : 'cursor-not-allowed opacity-60'}`}>
                     <FileImage className="h-8 w-8 text-[var(--app-accent)]" />
                     <span className="mt-2 text-sm font-semibold text-[var(--app-text)]">
-                      Upload Certificate of Registration
+                      {canSubmitClassCor ? 'Upload Certificate of Registration for class review' : 'Upload supporting Certificate of Registration'}
                     </span>
                     <span className="mt-1 text-xs theme-muted">
                       PNG, JPG, JPEG, or WEBP up to 5 MB
                     </span>
                     <input
+                      id="student-enrollment-cor"
+                      aria-label="Upload Certificate of Registration"
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
+                      disabled={!corFlow.canUpload || isJoining || isPreparingCor}
                       className="sr-only"
-                      onChange={(event) =>
-                        void handleSelectCor(event.currentTarget.files?.[0])
-                      }
+                      onChange={event => { const file=event.currentTarget.files?.[0]; event.currentTarget.value=''; void handleSelectCor(file); }}
                     />
                   </label>
 
@@ -687,7 +791,7 @@ export default function StudentScreen() {
                     </p>
                   )}
 
-                  {corUpload && (
+                  {corUpload && corFlow.mode !== 'academic-pending' && (
                     <div className="flex flex-col gap-3 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3 sm:flex-row sm:items-center">
                       <img
                         src={corUpload.fileDataUrl}
@@ -704,7 +808,10 @@ export default function StudentScreen() {
                       </div>
                       <button
                         type="button"
+                        aria-label="Remove selected COR"
+                        disabled={isJoining || isPreparingCor}
                         onClick={() => {
+                          draftTouched.current=true;
                           setCorUpload(null);
                           setCorUploadProgress(0);
                         }}
@@ -714,10 +821,12 @@ export default function StudentScreen() {
                       </button>
                     </div>
                   )}
+                  {corUpload && corFlow.mode !== 'academic-pending' && <DocumentPreview key={corUpload.id} source={{ fileName: corUpload.fileName, fileType: corUpload.fileType, fileSize: corUpload.fileSize, dataUrl: corUpload.fileDataUrl }} darkMode={darkMode} />}
+
 
                   <Button
-                    onClick={handleSubmitEnrollmentRequest}
-                    disabled={isJoining || isPreparingCor || !corUpload || !online}
+                    onClick={canSubmitClassCor ? handleSubmitEnrollmentRequest : handleSubmitAcademicCor}
+                    disabled={!corFlow.canUpload || isJoining || isPreparingCor || !corUpload || !online}
                     title={!online ? "Internet access is required." : undefined}
                   >
                     {isJoining ? (
@@ -725,12 +834,14 @@ export default function StudentScreen() {
                     ) : (
                       <FileImage className="mr-2 h-4 w-4" />
                     )}
-                    Submit Enrollment Request
+                    {corFlow.mode==='academic-pending'?'Awaiting teacher approval':'Submit Enrollment Request'}
                   </Button>
-                </>
-              )}
-            </div>
-          )}
+
+            {corFlow.mode === 'academic-pending' && corFlow.pending?.cor_file_name && <details><summary className="cursor-pointer font-semibold">View saved academic COR: {corFlow.pending.cor_file_name}</summary><AuthorizedDocumentPreview documentType="academic-cor" documentId={String(corFlow.pending.id)} darkMode={darkMode} /></details>}
+            {corFlow.mode === 'academic-pending' && corFlow.pending?.class_intents?.map(recipient=><p key={recipient.classId} className="text-sm break-words">{recipient.teacherName}: {recipient.className} / {semesterLabel(recipient.semester)} - {recipient.teacherStatus==='rejected'?'Request rejected':'Awaiting teacher enrollment approval'}.{recipient.reviewNote&&` Teacher note: ${recipient.reviewNote}`}</p>)}
+            {corFlow.mode === 'academic-pending' && joinCode.trim() && !corFlow.pending?.class_intents?.some(recipient=>recipient.classCode.toUpperCase()===joinCode.trim().toUpperCase()&&recipient.semester===joinSemester) && <Button type="button" variant="outline" disabled={isJoining||!online} onClick={()=>void handleSendSavedAcademicCor()}>Send saved COR to class teacher</Button>}
+            {joinLookup?.request?.status === 'pending' && <p role="status" className="text-sm">Your request and uploaded COR are saved. Track progress in Enrollment Requests below; no class access is granted until approval.</p>}
+          </div>
         </CardContent>
       </Card>
 
@@ -770,9 +881,10 @@ export default function StudentScreen() {
                       </div>
                       <Badge variant={getEnrollmentStatusBadge(request.status)}>
                         <Icon className="mr-1 h-3.5 w-3.5" />
-                        {request.status}
+                        {request.status==='accepted'?'Officially enrolled':request.verificationStatus ?? request.status}
                       </Badge>
                     </div>
+                    <p className="mt-2 text-sm theme-muted">{request.declaredDepartment || "Department not recorded"} / Year {request.declaredYear || "not recorded"} / Section {request.declaredSection || "not assigned"} / COR: {request.corSubmitted ? "Submitted" : "Not available"}</p>
                     <p className="mt-3 text-sm theme-muted">
                       {getEnrollmentStatusCopy(request.status)}
                     </p>
@@ -785,6 +897,9 @@ export default function StudentScreen() {
                     <p className="mt-3 text-xs theme-muted">
                       Submitted {new Date(request.submittedAt).toLocaleString()}
                     </p>
+                    <Button size="sm" variant="outline" className="mt-3" onClick={() => navigate(`/documents/cor/${request.id}`)}>
+                      Preview submitted COR
+                    </Button>
                   </div>
                 );
               })}

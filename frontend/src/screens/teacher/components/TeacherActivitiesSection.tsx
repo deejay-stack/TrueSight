@@ -1,5 +1,7 @@
+import { ClipboardList, ArrowRight } from "lucide-react";
+import { WorkspaceEmptyState } from "../../../components/WorkspaceEmptyState";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/Card";
 import type { TeacherOverviewActivity } from "../services/teacherClassroomService";
 
@@ -23,12 +25,7 @@ export function TeacherActivitiesSection({
 }: TeacherActivitiesSectionProps) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--app-text)]">All Activities</h2>
-        <p className="text-sm theme-muted">
-          Complete list of activities created across your classes.
-        </p>
-      </div>
+      <WorkspaceHeading eyebrow="CLASSROOM / ACTIVITIES" title="All Activities" description="Explore assignments, submission types, and deadlines across your classes." icon={ClipboardList} />
 
       {isLoading ? (
         <Card className="theme-card">
@@ -36,16 +33,14 @@ export function TeacherActivitiesSection({
         </Card>
       ) : activities.length === 0 ? (
         <Card className="theme-card">
-          <CardContent className="p-6 text-sm theme-muted">
-            No activities created yet.
-          </CardContent>
+          <WorkspaceEmptyState icon={ClipboardList} title="Room for your next idea" description="Open a class to create an activity for your students." />
         </Card>
       ) : (
         <div className="space-y-3">
           {activities.map((activity) => (
             <motion.div key={activity.id} whileHover={{ y: -2 }}>
-              <Card className="theme-card transition hover:border-[color-mix(in_srgb,var(--app-accent)_55%,var(--app-border))] hover:shadow-[var(--app-shadow)]">
-                <CardContent className="space-y-2 p-4">
+              <Card className="activity-list-card theme-card transition hover:border-[color-mix(in_srgb,var(--app-accent)_55%,var(--app-border))] hover:shadow-[var(--app-shadow)]">
+                <CardContent className="space-y-2 p-5">
                   <div
                     role="button"
                     tabIndex={0}
@@ -71,7 +66,7 @@ export function TeacherActivitiesSection({
 
                     <p className="text-sm theme-muted">{activity.description}</p>
 
-                    <div className="flex items-center gap-3 text-xs theme-muted">
+                    <div className="flex flex-wrap items-center gap-3 text-xs theme-muted">
                       <span className="rounded-full bg-[color-mix(in_srgb,var(--app-accent)_16%,transparent)] px-2 py-1 text-[var(--app-accent)]">
                         {getSubmissionTypeLabel(activity.submissionType)}
                       </span>

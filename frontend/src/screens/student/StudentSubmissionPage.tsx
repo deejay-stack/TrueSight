@@ -1,3 +1,4 @@
+import { DocumentPreview } from "../../components/documents/DocumentPreview";
 import {
   useEffect,
   useRef,
@@ -10,13 +11,10 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Code2,
   FileUp,
   Image as ImageIcon,
   Loader2,
-  Play,
   Send,
-  Terminal,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -52,11 +50,8 @@ import {
   type PreparedFileUpload,
 } from "../../utils/documentPreview";
 import { navigateBack } from "../../utils/navigation";
-import { CodeEditor } from "../../components/code/CodeEditor";
-import {
-  getProgrammingLanguageLabel,
-  runCode,
-} from "../../utils/codeRunner";
+import { CodeWorkspace } from "../../components/code/CodeWorkspace";
+
 
 const formatDateTime = (value: string | null) => {
   if (!value) {
@@ -86,7 +81,7 @@ export default function StudentSubmissionPage() {
   const navigate = useNavigate();
   const { activityId } = useParams<{ activityId: string }>();
   const { online } = useNetworkStatus();
-  const { darkMode } = useAuth();
+  const { darkMode,user } = useAuth();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [detail, setDetail] = useState<ActivityDetail | null>(null);
@@ -102,10 +97,7 @@ export default function StudentSubmissionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUnsubmitting, setIsUnsubmitting] = useState(false);
   const [unsubmitDialogOpen, setUnsubmitDialogOpen] = useState(false);
-  const [codeInput, setCodeInput] = useState("");
-  const [codeOutput, setCodeOutput] = useState("");
-  const [codeRunSummary, setCodeRunSummary] = useState("");
-  const [isRunningCode, setIsRunningCode] = useState(false);
+
 
   const activity = detail?.activity ?? null;
   const submission = detail?.mySubmission ?? null;
@@ -129,9 +121,6 @@ export default function StudentSubmissionPage() {
             ? payload.activity.starterCode ?? ""
             : ""),
       );
-      setCodeInput("");
-      setCodeOutput("");
-      setCodeRunSummary("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load activity.";
       toast.error(message);
@@ -209,49 +198,6 @@ export default function StudentSubmissionPage() {
     event.preventDefault();
     setDragActive(false);
     void prepareSelectedFile(event.dataTransfer.files?.[0]);
-  };
-
-  const handleCodeChange = (value: string) => {
-    setEssayContent(value);
-    setCodeOutput("");
-    setCodeRunSummary("");
-  };
-
-  const handleRunCode = async () => {
-    if (!activity || activity.submissionType !== "code" || !essayContent.trim()) {
-      return;
-    }
-    if (!online) {
-      toast.error("Internet access is required to run code.");
-      return;
-    }
-
-    setIsRunningCode(true);
-    setCodeOutput("Sending program to the compiler...");
-    setCodeRunSummary("");
-
-    try {
-      const result = await runCode(
-        essayContent,
-        activity.programmingLanguage,
-        codeInput,
-      );
-      setCodeOutput(result.output);
-      setCodeRunSummary(
-        [
-          result.status,
-          result.runtime,
-          result.executionTime ? `${result.executionTime}s` : "",
-          typeof result.memory === "number"
-            ? `${Math.round(result.memory / 1024)} MB`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      );
-    } finally {
-      setIsRunningCode(false);
-    }
   };
 
   const handleSubmit = async () => {
@@ -367,7 +313,7 @@ export default function StudentSubmissionPage() {
 
   return (
     <div
-      className="role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
+      className="workspace-detail-page role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
       style={getRoleThemeStyle("student", darkMode)}
     >
       <header className="fixed left-0 right-0 top-0 z-20 h-16 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_72%,transparent)] backdrop-blur-xl">
@@ -426,6 +372,7 @@ export default function StudentSubmissionPage() {
                   <p className="text-sm theme-muted">
                     Due {formatDateTime(activity.dueDate)}
                   </p>
+                  {activity.submissionType==='code'&&<section className="space-y-2 border-t theme-border pt-3 text-sm" aria-label="Programming activity instructions"><h2 className="font-semibold">Instructions</h2><p className="whitespace-pre-wrap theme-muted">{activity.description}</p>{Boolean(activity.rubric?.length)&&<details><summary className="cursor-pointer font-semibold">Grading rubric</summary><div className="mt-2 space-y-2">{activity.rubric?.map(c=><div key={c.id} className="rounded-lg border theme-border p-3"><p className="font-semibold">{c.title} — {c.maxPoints} points</p><p className="whitespace-pre-wrap theme-muted">{c.description}</p></div>)}</div></details>}</section>}
                   {!online && (
                     <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-[var(--status-warning)]">
                       You can review this activity while offline, but uploads and submissions are disabled.
@@ -437,97 +384,7 @@ export default function StudentSubmissionPage() {
               <Card className="theme-card">
                 <CardContent className="space-y-4 p-5">
                   {activity.submissionType === "code" ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
-                          <Code2 className="h-4 w-4 text-[var(--app-accent)]" />
-                          {getProgrammingLanguageLabel(activity.programmingLanguage)} Submission
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void handleRunCode()}
-                            disabled={isRunningCode || !online || !essayContent.trim()}
-                          >
-                            {isRunningCode ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Play className="mr-2 h-4 w-4" />
-                            )}
-                            {isRunningCode ? "Running..." : "Run Code"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => void handleSubmit()}
-                            disabled={isSubmitting || locked || !online || !essayContent.trim()}
-                          >
-                            {isSubmitting ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Send className="mr-2 h-4 w-4" />
-                            )}
-                            {isSubmitting
-                              ? "Submitting..."
-                              : submission
-                                ? "Submit Changes"
-                                : "Submit Activity"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="overflow-hidden rounded-lg bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)]">
-                        <div className="flex items-center justify-between border-b theme-border px-4 py-2 text-xs theme-muted">
-                          <span>{getProgrammingLanguageLabel(activity.programmingLanguage)}</span>
-                          <span>{essayContent.split("\n").length} lines</span>
-                        </div>
-                        <CodeEditor
-                          value={essayContent}
-                          language={activity.programmingLanguage}
-                          onChange={handleCodeChange}
-                          readOnly={locked}
-                          minHeight={460}
-                          darkMode={darkMode}
-                          ariaLabel={`${getProgrammingLanguageLabel(activity.programmingLanguage)} submission editor`}
-                        />
-                      </div>
-
-                      <p className="text-xs theme-muted">
-                        Brackets and parentheses close automatically. Use Tab to indent and Ctrl+Space to open code suggestions.
-                      </p>
-
-                      <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.35fr)_minmax(0,1fr)]">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold uppercase theme-muted">
-                            Standard Input
-                          </label>
-                          <textarea
-                            value={codeInput}
-                            onChange={(event) => setCodeInput(event.target.value)}
-                            rows={5}
-                            spellCheck={false}
-                            placeholder="Optional input passed to the program"
-                            className="theme-ring h-36 w-full resize-none rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]"
-                          />
-                        </div>
-                        <div className="overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-bg)_78%,black)]">
-                          <div className="flex h-9 items-center gap-2 border-b theme-border px-3 text-xs font-semibold text-[var(--app-text)]">
-                            <Terminal className="h-4 w-4 text-[var(--app-accent)]" />
-                            Program Output
-                            {codeRunSummary && (
-                              <span className="ml-auto truncate font-normal theme-muted">
-                                {codeRunSummary}
-                              </span>
-                            )}
-                          </div>
-                          <pre className="h-[106px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-6 text-[var(--app-text)]">
-                            {codeOutput || "Run your code to inspect compiler and program output."}
-                          </pre>
-                        </div>
-                      </div>
-                    </div>
+                    <CodeWorkspace key={`${user?.id}:${activity.id}`} activityId={activity.id} userId={String(user?.id)} value={essayContent} onChange={setEssayContent} language={activity.programmingLanguage} darkMode={darkMode} locked={locked||isSubmitting} online={online}/>
                   ) : activity.submissionType === "essay" ? (
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
@@ -607,6 +464,7 @@ export default function StudentSubmissionPage() {
                               ) : (
                                 <FileUp className="h-5 w-5 text-[var(--app-accent)]" />
                               )}
+
                               <div>
                                 <p className="font-medium text-[var(--app-text)]">
                                   {preparedUpload.fileName}
@@ -615,6 +473,7 @@ export default function StudentSubmissionPage() {
                                   {formatFileSize(preparedUpload.fileSize)}
                                 </p>
                               </div>
+
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {draftPreviewId && (
@@ -643,6 +502,8 @@ export default function StudentSubmissionPage() {
                           </div>
                         </div>
                       )}
+                      {preparedUpload && <DocumentPreview key={preparedUpload.id} source={{ fileName: preparedUpload.fileName, fileType: preparedUpload.fileType, fileSize: preparedUpload.fileSize, dataUrl: preparedUpload.fileDataUrl, textContent: preparedUpload.extractedText }} darkMode={darkMode} />}
+
                     </div>
                   )}
                 </CardContent>

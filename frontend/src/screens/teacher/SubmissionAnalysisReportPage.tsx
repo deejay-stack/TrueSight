@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { SubmissionReviewWorkspace } from "./components/SubmissionReviewWorkspace";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -28,7 +29,6 @@ import {
   type PreviewDocument,
 } from "./services/teacherClassroomService";
 import { AIExplainabilityPanel } from "./components/AIExplainabilityPanel";
-import { TextEvidencePanel } from "./components/TextEvidencePanel";
 import { MultiLevelAIDetectionPanel } from "./components/MultiLevelAIDetectionPanel";
 import {
   TeacherSidebar,
@@ -84,19 +84,25 @@ export default function SubmissionAnalysisReportPage() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
 
+  const loadSequence = useRef(0);
+  const currentSubmissionId = useRef(submissionId);
+  const invalidateSubmission = () => { loadSequence.current++; currentSubmissionId.current = undefined; };
   const loadSubmission = async () => {
-    if (!submissionId) return;
+    if (!submissionId || currentSubmissionId.current !== submissionId) return;
+    const requestSequence = ++loadSequence.current;
+    const isCurrent = () => requestSequence === loadSequence.current && currentSubmissionId.current === submissionId;
 
     setLoading(true);
     try {
       const response = await fetchSubmissionDetail(submissionId);
-      setSubmission(response);
+      if (isCurrent() && response.id === submissionId) setSubmission(response);
     } catch (error) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : "Failed to load report.";
       toast.error(message);
       setSubmission(null);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -115,7 +121,10 @@ export default function SubmissionAnalysisReportPage() {
   };
 
   useEffect(() => {
+    currentSubmissionId.current = submissionId;
+    setSubmission(null);
     void Promise.all([loadSubmission(), loadNotifications()]);
+    return invalidateSubmission;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submissionId]);
 
@@ -207,7 +216,7 @@ export default function SubmissionAnalysisReportPage() {
 
   return (
     <div
-      className="role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
+      className="workspace-detail-page role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
       style={getRoleThemeStyle("teacher", darkMode)}
     >
       <TeacherSidebar
@@ -335,14 +344,15 @@ export default function SubmissionAnalysisReportPage() {
             />
 
             <AIExplainabilityPanel details={details} />
-            <TextEvidencePanel key={submission.updatedAt} details={details} />
+            <SubmissionReviewWorkspace key={submission.id} submission={submission} darkMode={darkMode} />
 
             <Card className="theme-card">
               <CardContent className="space-y-3 p-5">
-                <h3 className="text-lg font-semibold text-[var(--app-text)]">Metrics</h3>
+                <h3 className="text-lg font-semibold text-[var(--app-text)]">Stored analysis metadata</h3>
+                <p className="text-xs theme-muted">Legacy stored metadata is shown as recorded. Accuracy, precision, recall, and F1 describe model evaluation datasets, not the correctness of this individual result.</p>
                 {!metrics ? (
                   <p className="text-sm theme-muted">
-                    Metrics are unavailable for this submission.
+                    No additional metadata was recorded for this submission.
                   </p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

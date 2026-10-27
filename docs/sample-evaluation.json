@@ -1,0 +1,464 @@
+{
+  "generatedAt": "2026-10-23T10:11:07.779Z",
+  "threshold": 0.9913054109,
+  "results": [
+    {
+      "sample": "SE_AI.docx",
+      "authorship": "ai",
+      "provenance": "User confirmed SE_AI was generated with GPT and SE_ME was written by them, in conversation on 2026-10-23. User identified SE_ME as the contradictory result. Author-reported provenance; not independently audited.",
+      "sha256": "eed51698b37edb835d49c6dbbe36d674f4f583d970a7922483cb396ddfd6840d",
+      "extractedTextSha256": "d4d35dab7d66005fbcde40fce1a23c77c3ef912fcae998d691b5d52f35409150",
+      "characters": 1796,
+      "words": 203,
+      "aiProbability": 99.99369382858276,
+      "humanProbability": 0.006301412213360891,
+      "confidenceScore": 99.99369382858276,
+      "isAIGenerated": true,
+      "details": {
+        "analysisId": "ee6b0d99-44d7-4038-87b3-f4fdf3c45b84",
+        "analyzedAt": "2026-10-23T10:10:58.208Z",
+        "modelVersion": "V3-epoch1-step3750:sha256:1ca9643cc1382de007f9304ad9e3254fe826f11b566d2281b5d37a6b8dcce49a",
+        "decisionLabel": "AI-likely",
+        "decisionRule": "AI if pAI >= threshold",
+        "calibration": {
+          "status": "not_calibrated_in_this_application",
+          "note": "Softmax/sigmoid scores are not verified authorship frequencies. Below-threshold is not proof of human authorship."
+        },
+        "detectorType": "text",
+        "modelName": "DeBERTa-v3-base V3",
+        "provider": "DeBERTa-v3-base V3",
+        "source": "local-text-model",
+        "status": "completed",
+        "analysisStatus": "completed",
+        "predictedLabel": "AI",
+        "verdict": "AI-likely",
+        "finalPrediction": "AI-likely",
+        "threshold": 0.9913054109,
+        "aiProbability": 99.99369382858276,
+        "humanProbability": 0.006301412213360891,
+        "confidenceScore": 99.99369382858276,
+        "probabilities": {
+          "ai": 0.9999369382858276,
+          "human": 0.00006301412213360891
+        },
+        "rawOutput": [
+          -4.697996139526367,
+          4.974092483520508
+        ],
+        "classMapping": {
+          "0": "HUMAN",
+          "1": "AI"
+        },
+        "aiPercentage": 99.99369382858276,
+        "humanPercentage": 0.006301412213360891,
+        "reasons": [
+          "DeBERTa-v3-base V3 returned 99.993694% AI probability and 0.006301% human probability.",
+          "The frozen rule is AI when its unrounded probability is greater than or equal to 99.13054109%. This submission meets that rule, so its result is AI.",
+          "DeBERTa evaluates up to 512 tokens, including special tokens. Sentence masking measures changes within that same context; it does not replace the original prediction.",
+          "Confidence is the larger of the two model probabilities, not a separately measured probability that the verdict is correct. Review drafts, references, and the student's explanation alongside this result."
+        ],
+        "textExplanation": {
+          "status": "completed",
+          "method": "sentence_occlusion",
+          "version": 2,
+          "baselineAiProbability": 0.9999369382858276,
+          "sentences": [
+            {
+              "sentenceNumber": 1,
+              "start": 0,
+              "end": 65,
+              "maskedAiProbability": 0.9999351501464844,
+              "impactPercentagePoints": 0.00017881393432617188
+            },
+            {
+              "sentenceNumber": 2,
+              "start": 67,
+              "end": 255,
+              "maskedAiProbability": 0.9999449253082275,
+              "impactPercentagePoints": -0.0007987022399902344
+            },
+            {
+              "sentenceNumber": 3,
+              "start": 256,
+              "end": 445,
+              "maskedAiProbability": 0.9999492168426514,
+              "impactPercentagePoints": -0.0012278556823730469
+            },
+            {
+              "sentenceNumber": 4,
+              "start": 447,
+              "end": 627,
+              "maskedAiProbability": 0.9999467134475708,
+              "impactPercentagePoints": -0.0009775161743164062
+            },
+            {
+              "sentenceNumber": 5,
+              "start": 628,
+              "end": 851,
+              "maskedAiProbability": 0.9999505281448364,
+              "impactPercentagePoints": -0.0013589859008789062
+            },
+            {
+              "sentenceNumber": 6,
+              "start": 853,
+              "end": 1025,
+              "maskedAiProbability": 0.9999451637268066,
+              "impactPercentagePoints": -0.0008225440979003906
+            },
+            {
+              "sentenceNumber": 7,
+              "start": 1026,
+              "end": 1216,
+              "maskedAiProbability": 0.9999488592147827,
+              "impactPercentagePoints": -0.0011920928955078125
+            },
+            {
+              "sentenceNumber": 8,
+              "start": 1218,
+              "end": 1424,
+              "maskedAiProbability": 0.9999451637268066,
+              "impactPercentagePoints": -0.0008225440979003906
+            },
+            {
+              "sentenceNumber": 9,
+              "start": 1426,
+              "end": 1550,
+              "maskedAiProbability": 0.9999450445175171,
+              "impactPercentagePoints": -0.0008106231689453125
+            },
+            {
+              "sentenceNumber": 10,
+              "start": 1551,
+              "end": 1796,
+              "maskedAiProbability": 0.9999415874481201,
+              "impactPercentagePoints": -0.0004649162292480469
+            }
+          ],
+          "evaluatedTokens": 252,
+          "maxTokens": 512,
+          "truncated": false,
+          "evaluatedSentences": 10,
+          "availableSentences": 10,
+          "sentenceLimit": 16,
+          "summary": "Each passage is masked in the original tokenized context and the same model is run again. A positive impact means its presence supported a higher AI score; a negative impact means it lowered that score.",
+          "limitations": [
+            "These are model sensitivity measurements, not sentence-level AI probabilities or proof of authorship.",
+            "Masking changes the input context. Passage effects interact and do not add up to the document score.",
+            "The document decision uses only the original inference and frozen threshold. Highlight colors do not change that decision."
+          ]
+        },
+        "analysisTimeline": [
+          {
+            "label": "Local model inference",
+            "status": "complete",
+            "detail": "DeBERTa-v3-base V3"
+          },
+          {
+            "label": "Frozen decision rule",
+            "status": "complete",
+            "detail": "AI probability greater than or equal to 99.13054109%; returned AI."
+          }
+        ],
+        "message": "Probabilities are guidance for teacher review, not proof of academic misconduct.",
+        "scoreCards": [
+          {
+            "id": "aiProbability",
+            "label": "AI probability",
+            "value": 99.99369382858276,
+            "unit": "%",
+            "tone": "risk"
+          },
+          {
+            "id": "humanProbability",
+            "label": "Human probability",
+            "value": 0.006301412213360891,
+            "unit": "%",
+            "tone": "risk"
+          }
+        ],
+        "integrationStatus": {
+          "providerConfigured": true,
+          "liveProviderUsed": true,
+          "fallbackUsed": false,
+          "message": "Local model inference completed."
+        },
+        "reviewChecklist": [
+          {
+            "label": "Compare the submission with drafts, sources, and classroom work",
+            "status": "recommended"
+          }
+        ]
+      }
+    },
+    {
+      "sample": "SE_ME.docx",
+      "authorship": "human",
+      "provenance": "User confirmed SE_AI was generated with GPT and SE_ME was written by them, in conversation on 2026-10-23. User identified SE_ME as the contradictory result. Author-reported provenance; not independently audited.",
+      "sha256": "a97ebeb04f68936898194a23cd2c24c4197aceab59a0d78d07eff83cff4de47c",
+      "extractedTextSha256": "c53e41a912d2dc05611d35839b01dd63e9702ad07f050414d9a64ecdfa8f69c0",
+      "characters": 1123,
+      "words": 204,
+      "aiProbability": 99.08859729766846,
+      "humanProbability": 0.9113946929574013,
+      "confidenceScore": 99.08859729766846,
+      "isAIGenerated": false,
+      "details": {
+        "analysisId": "b88eb62c-ade9-4df6-b029-0db524db802c",
+        "analyzedAt": "2026-10-23T10:11:07.779Z",
+        "modelVersion": "V3-epoch1-step3750:sha256:1ca9643cc1382de007f9304ad9e3254fe826f11b566d2281b5d37a6b8dcce49a",
+        "decisionLabel": "Below AI threshold — authorship uncertain",
+        "decisionRule": "AI if pAI >= threshold",
+        "calibration": {
+          "status": "not_calibrated_in_this_application",
+          "note": "Softmax/sigmoid scores are not verified authorship frequencies. Below-threshold is not proof of human authorship."
+        },
+        "detectorType": "text",
+        "modelName": "DeBERTa-v3-base V3",
+        "provider": "DeBERTa-v3-base V3",
+        "source": "local-text-model",
+        "status": "completed",
+        "analysisStatus": "completed",
+        "predictedLabel": "HUMAN",
+        "verdict": "Below AI threshold — authorship uncertain",
+        "finalPrediction": "Below AI threshold — authorship uncertain",
+        "threshold": 0.9913054109,
+        "aiProbability": 99.08859729766846,
+        "humanProbability": 0.9113946929574013,
+        "confidenceScore": 99.08859729766846,
+        "probabilities": {
+          "ai": 0.9908859729766846,
+          "human": 0.009113946929574013
+        },
+        "rawOutput": [
+          -2.3533947467803955,
+          2.3353989124298096
+        ],
+        "classMapping": {
+          "0": "HUMAN",
+          "1": "AI"
+        },
+        "aiPercentage": 99.08859729766846,
+        "humanPercentage": 0.9113946929574013,
+        "reasons": [
+          "DeBERTa-v3-base V3 returned 99.088597% AI probability and 0.911395% human probability.",
+          "The frozen rule is AI when its unrounded probability is greater than or equal to 99.13054109%. This submission does not meet that rule, so its result is HUMAN.",
+          "DeBERTa evaluates up to 512 tokens, including special tokens. Sentence masking measures changes within that same context; it does not replace the original prediction.",
+          "Confidence is the larger of the two model probabilities, not a separately measured probability that the verdict is correct. Review drafts, references, and the student's explanation alongside this result."
+        ],
+        "textExplanation": {
+          "status": "completed",
+          "method": "sentence_occlusion",
+          "version": 2,
+          "baselineAiProbability": 0.9908859729766846,
+          "sentences": [
+            {
+              "sentenceNumber": 1,
+              "start": 0,
+              "end": 29,
+              "maskedAiProbability": 0.9929620623588562,
+              "impactPercentagePoints": -0.20760893821716309
+            },
+            {
+              "sentenceNumber": 2,
+              "start": 33,
+              "end": 142,
+              "maskedAiProbability": 0.9940406680107117,
+              "impactPercentagePoints": -0.31546950340270996
+            },
+            {
+              "sentenceNumber": 3,
+              "start": 143,
+              "end": 462,
+              "maskedAiProbability": 0.9915116429328918,
+              "impactPercentagePoints": -0.06256699562072754
+            },
+            {
+              "sentenceNumber": 4,
+              "start": 463,
+              "end": 551,
+              "maskedAiProbability": 0.9951293468475342,
+              "impactPercentagePoints": -0.42433738708496094
+            },
+            {
+              "sentenceNumber": 5,
+              "start": 552,
+              "end": 643,
+              "maskedAiProbability": 0.9909976720809937,
+              "impactPercentagePoints": -0.011169910430908203
+            },
+            {
+              "sentenceNumber": 6,
+              "start": 644,
+              "end": 695,
+              "maskedAiProbability": 0.9912394881248474,
+              "impactPercentagePoints": -0.03535151481628418
+            },
+            {
+              "sentenceNumber": 7,
+              "start": 696,
+              "end": 918,
+              "maskedAiProbability": 0.9919189810752869,
+              "impactPercentagePoints": -0.10330080986022949
+            },
+            {
+              "sentenceNumber": 8,
+              "start": 919,
+              "end": 1123,
+              "maskedAiProbability": 0.9941532015800476,
+              "impactPercentagePoints": -0.3267228603363037
+            }
+          ],
+          "evaluatedTokens": 218,
+          "maxTokens": 512,
+          "truncated": false,
+          "evaluatedSentences": 8,
+          "availableSentences": 8,
+          "sentenceLimit": 16,
+          "summary": "Each passage is masked in the original tokenized context and the same model is run again. A positive impact means its presence supported a higher AI score; a negative impact means it lowered that score.",
+          "limitations": [
+            "These are model sensitivity measurements, not sentence-level AI probabilities or proof of authorship.",
+            "Masking changes the input context. Passage effects interact and do not add up to the document score.",
+            "The document decision uses only the original inference and frozen threshold. Highlight colors do not change that decision."
+          ]
+        },
+        "analysisTimeline": [
+          {
+            "label": "Local model inference",
+            "status": "complete",
+            "detail": "DeBERTa-v3-base V3"
+          },
+          {
+            "label": "Frozen decision rule",
+            "status": "complete",
+            "detail": "AI probability greater than or equal to 99.13054109%; returned HUMAN."
+          }
+        ],
+        "message": "The AI score is high but below the validated 99.13054109% decision threshold. HUMAN is the threshold decision, not a claim that this text is human-created.",
+        "scoreCards": [
+          {
+            "id": "aiProbability",
+            "label": "AI probability",
+            "value": 99.08859729766846,
+            "unit": "%",
+            "tone": "calm"
+          },
+          {
+            "id": "humanProbability",
+            "label": "Human probability",
+            "value": 0.9113946929574013,
+            "unit": "%",
+            "tone": "calm"
+          }
+        ],
+        "integrationStatus": {
+          "providerConfigured": true,
+          "liveProviderUsed": true,
+          "fallbackUsed": false,
+          "message": "Local model inference completed."
+        },
+        "reviewChecklist": [
+          {
+            "label": "Compare the submission with drafts, sources, and classroom work",
+            "status": "recommended"
+          }
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "sampleSize": 2,
+    "excluded": 0,
+    "failedOrMissingPredictions": 0,
+    "presentationReviewRequired": 1,
+    "confusionMatrix": {
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "tp": 1
+    },
+    "accuracy": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "falsePositiveRate": 0,
+    "falseNegativeRate": 0,
+    "rocAuc": 1,
+    "calibration": {
+      "brierScore": 0.49092750770936533,
+      "expectedCalibrationError": 0.4954114556312561,
+      "bins": [
+        {
+          "lower": 0,
+          "upper": 0.1,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.3,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 0,
+          "meanScore": null,
+          "aiFrequency": null
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 2,
+          "meanScore": 0.9954114556312561,
+          "aiFrequency": 0.5
+        }
+      ]
+    },
+    "limitation": "Descriptive sample metrics only; a small or convenience sample cannot establish general accuracy, justify threshold tuning, or validate probability calibration. Mixed and unknown authorship are excluded."
+  }
+}

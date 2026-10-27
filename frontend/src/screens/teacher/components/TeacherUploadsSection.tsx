@@ -1,18 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AuthorizedDocumentPreview } from "../../../components/documents/AuthorizedDocumentPreview";
+import { previewKind } from "../../../utils/filePreview";
+import { FileCheck2, AlertCircle, Check, CheckCircle2, Clock3, Eye, FileImage, RefreshCw, X } from "lucide-react";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  AlertCircle,
-  Check,
-  CheckCircle2,
-  Clock3,
-  Eye,
-  FileImage,
-  Maximize2,
-  RefreshCw,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
@@ -20,9 +11,18 @@ import { Card, CardContent } from "../../../components/ui/Card";
 import { formatFileSize } from "../../../utils/documentPreview";
 import { getDisplayInitials } from "../../../utils/profileImage";
 import { getRoleThemeStyle } from "../../../theme/roleThemes";
-import type { EnrollmentRequest } from "../services/teacherClassroomService";
+import { semesterLabel } from "../../../utils/curriculum";
+import { AcademicEnrollmentIntents } from './AcademicEnrollmentIntents';
+import type { AcademicEnrollmentIntent } from '../../../services/academicEnrollmentService';
+import { fetchDocumentPreview, type EnrollmentRequest } from "../services/teacherClassroomService";
 
 type TeacherUploadsSectionProps = {
+  academicIntents?: AcademicEnrollmentIntent[];
+  reviewingAcademicId?: number|null;
+  onReviewAcademic?: (intent:AcademicEnrollmentIntent,status:'accepted'|'rejected',note:string)=>void;
+  focusIntentId?: string|null;
+  focusRequestId?: string|null;
+  darkMode?: boolean;
   requests: EnrollmentRequest[];
   isLoading: boolean;
   reviewingId: string | null;
@@ -63,17 +63,46 @@ function CorThumbnail({
   request: EnrollmentRequest;
   onOpen: (request: EnrollmentRequest) => void;
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [preview, setPreview] = useState<{ id: string; dataUrl: string } | null>(null);
+  const isImage = previewKind({ fileName: request.corFileName ?? "", fileType: request.corFileType }) === "image";
+  const dataUrl = request.corDataUrl || (preview?.id === request.id ? preview.dataUrl : null);
+
+  useEffect(() => {
+    const button = buttonRef.current;
+    if (!button || !isImage || request.corDataUrl) return;
+
+    let active = true;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      void fetchDocumentPreview("cor", request.id).then((document) => {
+        if (active && document.dataUrl) setPreview({ id: request.id, dataUrl: document.dataUrl });
+      }).catch(() => {
+        // Keep the file icon; opening the full viewer reports access failures.
+      });
+    });
+    observer.observe(button);
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [request.id, request.corDataUrl, isImage]);
+
   return (
     <button
+      ref={buttonRef}
       type="button"
+      data-cor-id={request.id}
+      aria-label={`Preview COR submitted by ${request.studentName ?? "Student"}`}
       onClick={() => onOpen(request)}
-      className="theme-ring group flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)]"
+      className="theme-ring group flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)]"
     >
-      {request.corDataUrl ? (
+      {dataUrl && isImage ? (
         <img
-          src={request.corDataUrl}
+          src={dataUrl}
           alt={`${request.studentName ?? "Student"} COR thumbnail`}
-          className="h-full w-full object-cover transition group-hover:scale-105"
+          className="h-full w-full object-contain p-1 transition group-hover:scale-105"
         />
       ) : (
         <FileImage className="h-5 w-5 text-[var(--app-muted)]" />
@@ -83,6 +112,12 @@ function CorThumbnail({
 }
 
 export function TeacherUploadsSection({
+  academicIntents = [],
+  reviewingAcademicId,
+  onReviewAcademic,
+  focusIntentId,
+  focusRequestId,
+  darkMode = false,
   requests,
   isLoading,
   reviewingId,
@@ -90,25 +125,18 @@ export function TeacherUploadsSection({
   onAccept,
   onReject,
 }: TeacherUploadsSectionProps) {
-  const previewViewportRef = useRef<HTMLDivElement | null>(null);
-  const [selectedRequest, setSelectedRequest] =
-    useState<EnrollmentRequest | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusRequestId||null);
+  const selectedRequest = requests.find(r => r.id === selectedRequestId) ?? null;
   const [rejectionNote, setRejectionNote] = useState("");
-  const [previewZoom, setPreviewZoom] = useState(1);
-  const [previewImageError, setPreviewImageError] = useState(false);
 
   const openViewer = (request: EnrollmentRequest) => {
-    setSelectedRequest(request);
+    setSelectedRequestId(request.id);
     setRejectionNote(request.rejectionNote ?? "");
-    setPreviewZoom(1);
-    setPreviewImageError(false);
   };
 
   const closeViewer = () => {
-    setSelectedRequest(null);
+    setSelectedRequestId(null);
     setRejectionNote("");
-    setPreviewZoom(1);
-    setPreviewImageError(false);
   };
 
   useEffect(() => {
@@ -117,10 +145,8 @@ export function TeacherUploadsSection({
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedRequest(null);
+        setSelectedRequestId(null);
         setRejectionNote("");
-        setPreviewZoom(1);
-        setPreviewImageError(false);
       }
     };
 
@@ -133,36 +159,25 @@ export function TeacherUploadsSection({
     };
   }, [selectedRequest]);
 
-  useLayoutEffect(() => {
-    const viewport = previewViewportRef.current;
-    if (!viewport || !selectedRequest) return;
-
-    viewport.scrollLeft = Math.max(
-      0,
-      (viewport.scrollWidth - viewport.clientWidth) / 2,
-    );
-    viewport.scrollTop = Math.max(
-      0,
-      (viewport.scrollHeight - viewport.clientHeight) / 2,
-    );
-  }, [previewZoom, selectedRequest]);
 
   const pendingCount = requests.filter((request) => request.status === "pending").length;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-[var(--app-text)]">Uploads</h2>
-          <p className="text-sm theme-muted">
-            Review student COR submissions before class enrollment is granted.
-          </p>
-        </div>
-        <Button variant="outline" onClick={onRefresh} disabled={isLoading}>
-          <RefreshCw className={["mr-2 h-4 w-4", isLoading ? "animate-spin" : ""].join(" ")} />
-          Refresh
-        </Button>
-      </div>
+      <WorkspaceHeading
+        eyebrow="CLASSROOM / ENROLLMENT"
+        title="Student Enrollment Requests"
+        description="Review student registration documents and manage enrollment requests."
+        icon={FileCheck2}
+        actions={
+          <Button variant="outline" onClick={onRefresh} disabled={isLoading}>
+            <RefreshCw className={["mr-2 h-4 w-4", isLoading ? "animate-spin" : ""].join(" ")} />
+            Refresh
+          </Button>
+        }
+      />
+
+      <AcademicEnrollmentIntents intents={academicIntents} darkMode={darkMode} reviewingId={reviewingAcademicId} onReview={onReviewAcademic} focusId={focusIntentId}/>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="theme-card">
@@ -192,16 +207,17 @@ export function TeacherUploadsSection({
       ) : requests.length === 0 ? (
         <Card className="theme-card">
           <CardContent className="p-6 text-sm theme-muted">
-            No COR enrollment requests yet.
+            No separate class approval requests. Saved COR enrollment submissions appear above.
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_92%,transparent)] lg:block">
-            <table className="w-full text-left text-sm">
+          <div className="hidden overflow-x-auto rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_92%,transparent)] lg:block">
+            <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="border-b theme-border text-xs uppercase tracking-wide theme-muted">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Student</th>
+                  <th className="px-4 py-3 font-semibold">Department / Year / Section</th>
                   <th className="px-4 py-3 font-semibold">Class</th>
                   <th className="px-4 py-3 font-semibold">Submitted</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
@@ -235,6 +251,7 @@ export function TeacherUploadsSection({
                         </div>
                       </div>
                     </td>
+                    <td className="px-4 py-3">{request.declaredDepartment || 'Not recorded'} / Year {request.declaredYear || 'not recorded'} / Section {request.declaredSection || 'unassigned'}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-[var(--app-text)]">
                         {request.className}
@@ -245,13 +262,13 @@ export function TeacherUploadsSection({
                       {new Date(request.submittedAt).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={request.status} />
+                      <StatusBadge status={request.status} /><p className="mt-1 text-xs theme-muted">{request.verificationStatus}</p><p className="mt-1 text-xs theme-muted">{request.eligibilityMessage}</p>
                     </td>
                     <td className="px-4 py-3">
                       <CorThumbnail request={request} onOpen={openViewer} />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex min-w-44 flex-col items-stretch gap-2">
                         <Button size="sm" variant="outline" onClick={() => openViewer(request)}>
                           <Eye className="mr-2 h-4 w-4" />
                           View
@@ -259,10 +276,10 @@ export function TeacherUploadsSection({
                         <Button
                           size="sm"
                           onClick={() => onAccept(request)}
-                          disabled={request.status !== "pending" || reviewingId === request.id}
+                          disabled={request.status !== "pending" || reviewingId === request.id || request.eligibleForApproval === false}
                         >
                           <Check className="mr-2 h-4 w-4" />
-                          Accept
+                          Approve Enrollment
                         </Button>
                         <Button
                           size="sm"
@@ -302,7 +319,7 @@ export function TeacherUploadsSection({
                         <p className="font-semibold text-[var(--app-text)]">
                           {request.studentName ?? "Student"}
                         </p>
-                        <StatusBadge status={request.status} />
+                        <StatusBadge status={request.status} /><p className="mt-1 text-xs theme-muted">{request.verificationStatus}</p><p className="mt-1 text-xs theme-muted">{request.eligibilityMessage}</p>
                       </div>
                       <p className="text-xs theme-muted">
                         {request.studentEmail ?? "No email"}
@@ -323,13 +340,13 @@ export function TeacherUploadsSection({
                       View COR
                     </Button>
                     <Button
-                      className="w-full"
+                      className="h-auto min-h-9 w-full whitespace-normal"
                       size="sm"
                       onClick={() => onAccept(request)}
-                      disabled={request.status !== "pending" || reviewingId === request.id}
+                      disabled={request.status !== "pending" || reviewingId === request.id || request.eligibleForApproval === false}
                     >
                       <Check className="mr-2 h-4 w-4" />
-                      Accept
+                      Approve Enrollment
                     </Button>
                     <Button
                       className="w-full"
@@ -382,133 +399,91 @@ export function TeacherUploadsSection({
                 </button>
               </header>
 
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div
-                  className="relative min-h-0 flex-1 overflow-hidden bg-[color-mix(in_srgb,var(--app-bg)_82%,black)]"
-                >
-                  <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] p-1 shadow-[var(--app-shadow)]">
-                    <button
-                      type="button"
-                      title="Zoom out"
-                      aria-label="Zoom out"
-                      disabled={previewZoom <= 1}
-                      onClick={() => setPreviewZoom((current) => Math.max(1, current - 0.25))}
-                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <ZoomOut className="h-4 w-4" />
-                    </button>
-                    <span className="w-12 text-center text-xs font-semibold text-[var(--app-text)]">
-                      {Math.round(previewZoom * 100)}%
-                    </span>
-                    <button
-                      type="button"
-                      title="Zoom in"
-                      aria-label="Zoom in"
-                      disabled={previewZoom >= 3}
-                      onClick={() => setPreviewZoom((current) => Math.min(3, current + 0.25))}
-                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <ZoomIn className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Fit image"
-                      aria-label="Fit image"
-                      onClick={() => setPreviewZoom(1)}
-                      className="theme-ring grid h-8 w-8 place-items-center rounded-md text-[var(--app-text)] transition hover:bg-[color-mix(in_srgb,var(--app-accent)_12%,transparent)]"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div ref={previewViewportRef} className="h-full w-full overflow-auto">
-                  {selectedRequest.corDataUrl && !previewImageError ? (
-                    <div
-                      className="flex min-h-full min-w-full items-center justify-center p-2"
-                      style={{
-                        width: `${previewZoom * 100}%`,
-                        height: `${previewZoom * 100}%`,
-                      }}
-                    >
-                      <img
-                        key={selectedRequest.corDataUrl}
-                        src={selectedRequest.corDataUrl}
-                        alt={`${selectedRequest.studentName ?? "Student"} COR`}
-                        className="block h-full w-full object-contain object-center"
-                        loading="eager"
-                        decoding="sync"
-                        onError={() => setPreviewImageError(true)}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                          objectPosition: "center",
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="grid h-full min-h-80 place-items-center px-6 text-center text-sm theme-muted">
-                      {previewImageError
-                        ? "The COR image could not be decoded. Refresh the uploads and open it again."
-                        : "COR preview unavailable."}
-                    </div>
-                  )}
-                  </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div className="p-3 sm:p-5">
+                  <AuthorizedDocumentPreview
+                    key={selectedRequest.id}
+                    documentType="cor"
+                    documentId={selectedRequest.id}
+                    darkMode={darkMode}
+                    className="enrollment-cor-preview"
+                  />
                 </div>
 
-                <div className="max-h-[42dvh] shrink-0 overflow-y-auto border-t theme-border px-4 py-2.5 text-xs">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
-                  <div>
+                <section aria-labelledby="cor-student-details" className="space-y-5 border-t theme-border p-4 text-sm sm:p-5">
+                  <h3 id="cor-student-details" className="text-base font-semibold">Student and enrollment information</h3>
+                  <div className="rounded-lg border theme-border p-4">
+                    <p className="text-xs uppercase theme-muted">Requested official subject</p>
+                    <p className="font-semibold">{selectedRequest.subjectCode || 'Unmapped'} — {selectedRequest.subjectName || 'Curriculum configuration required'}</p>
+                    <p>Required: {selectedRequest.requiredDepartment || 'Unassigned department'} / Year {selectedRequest.requiredYear || 'unassigned'}</p>
+                    <p>{semesterLabel(selectedRequest.semester ?? 1)}</p>
+                    <p className="mt-2 theme-muted">Compare this subject code and the academic information against the COR before approval. Subject registration is reviewed manually; no automatic COR match is claimed.</p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 [&>div]:min-w-0">
+                  <div className="space-y-1">
                     <p className="uppercase theme-muted">Sender</p>
                     <p className="font-semibold text-[var(--app-text)]">
                       {selectedRequest.studentName ?? "Student"}
                     </p>
-                    <p className="truncate text-[var(--app-text)]" title={selectedRequest.studentEmail ?? "No email"}>
+                    <p className="break-words text-[var(--app-text)]">
                       {selectedRequest.studentEmail ?? "No email"}
                     </p>
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <p className="uppercase theme-muted">Class</p>
-                    <p className="truncate font-semibold text-[var(--app-text)]">
+                    <p className="break-words font-semibold text-[var(--app-text)]">
                       {selectedRequest.className}
                     </p>
                     <p className="theme-muted">{selectedRequest.classCode}</p>
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <p className="uppercase theme-muted">Submitted</p>
                     <p className="font-medium text-[var(--app-text)]">
                       {new Date(selectedRequest.submittedAt).toLocaleString()}
                     </p>
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <p className="uppercase theme-muted">File</p>
-                    <p className="truncate font-medium text-[var(--app-text)]" title={selectedRequest.corFileName}>
+                    <p className="break-words font-medium text-[var(--app-text)]">
                       {selectedRequest.corFileName}
                     </p>
                     <p className="theme-muted">
                       {formatFileSize(selectedRequest.corFileSize)}
                     </p>
                   </div>
-                  <div>
-                    <p className="mb-1 uppercase theme-muted">Status</p>
-                    <StatusBadge status={selectedRequest.status} />
                   </div>
+                  <div className="grid gap-4 rounded-lg border theme-border p-4 sm:grid-cols-2 lg:grid-cols-3 [&>div]:min-w-0">
+                    <div className="space-y-1">
+                      <p className="uppercase theme-muted">Declared academic information</p>
+                      <p className="break-words">{selectedRequest.declaredDepartment || 'Not recorded'} / Year {selectedRequest.declaredYear || 'not recorded'} / Section {selectedRequest.declaredSection || 'unassigned'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="uppercase theme-muted">Official academic information</p>
+                      <p className="break-words">{selectedRequest.officialDepartment || 'Unassigned'} / Year {selectedRequest.officialYear || 'unassigned'} / Section {selectedRequest.officialSection || 'unassigned'}</p>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                      <p className="uppercase theme-muted">Status</p>
+                      <StatusBadge status={selectedRequest.status} />
+                      <p>{selectedRequest.verificationStatus}</p>
+                      <p className="theme-muted">{selectedRequest.eligibilityMessage}</p>
+                    </div>
                   </div>
                   {selectedRequest.status === "pending" && (
-                    <div className="mt-2 grid gap-2 border-t theme-border pt-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="grid gap-4 border-t theme-border pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                       <div>
-                      <label className="uppercase theme-muted">
+                      <label htmlFor="cor-rejection-note" className="uppercase theme-muted">
                         Rejection note
                       </label>
                       <input
+                        id="cor-rejection-note"
                         type="text"
                         value={rejectionNote}
                         onChange={(event) => setRejectionNote(event.target.value)}
                         placeholder="Optional note for the student"
-                        className="theme-ring mt-1 h-9 w-full rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 text-xs text-[var(--app-text)]"
+                        className="theme-ring mt-2 h-10 w-full rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] px-3 text-sm text-[var(--app-text)]"
                       />
                       </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <Button
                         className="w-full"
                         variant="destructive"
@@ -527,15 +502,15 @@ export function TeacherUploadsSection({
                           onAccept(selectedRequest);
                           closeViewer();
                         }}
-                        disabled={reviewingId === selectedRequest.id}
+                        disabled={reviewingId === selectedRequest.id || selectedRequest.eligibleForApproval === false}
                       >
                         <Check className="mr-2 h-4 w-4" />
-                        Accept
+                        Approve Enrollment
                       </Button>
                     </div>
                     </div>
                   )}
-                </div>
+                </section>
               </div>
           </section>
         </div>,

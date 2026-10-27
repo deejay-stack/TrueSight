@@ -1,5 +1,8 @@
+import { semesterLabel } from '../../../utils/curriculum';
+import { BookOpen, Copy, Plus } from "lucide-react";
+import { WorkspaceEmptyState } from "../../../components/WorkspaceEmptyState";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
 import { motion } from "framer-motion";
-import { Copy, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
 import type { TeacherClass } from "../services/teacherClassroomService";
@@ -25,18 +28,18 @@ export function TeacherClassesSection({
 }: TeacherClassesSectionProps) {
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-[var(--app-text)]">Your Classes</h2>
-          <p className="text-sm theme-muted">
-            Manage activities, students, and AI analysis per class.
-          </p>
-        </div>
-        <Button onClick={onCreateClass}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Class
-        </Button>
-      </div>
+      <WorkspaceHeading
+        eyebrow="CLASSROOM / ORGANIZE"
+        title="Your Classes"
+        description="Manage your classrooms, invite students, and keep every activity in view."
+        icon={BookOpen}
+        actions={
+          <Button onClick={onCreateClass}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Class
+          </Button>
+        }
+      />
 
       {latestCreatedCode && (
         <Card className="theme-card border-dashed theme-border">
@@ -61,23 +64,27 @@ export function TeacherClassesSection({
         </Card>
       ) : classes.length === 0 ? (
         <Card className="theme-card">
-          <CardContent className="p-6 text-sm theme-muted">
-            No classes yet. Create your first class.
-          </CardContent>
+          <WorkspaceEmptyState icon={BookOpen} title="Your classroom starts here" description="Create your first class, then invite students with its join code." />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="workspace-card-grid grid grid-cols-1 gap-5 lg:grid-cols-2">
           {classes.map((classroom) => (
             <motion.div key={classroom.id} whileHover={{ scale: 1.01 }}>
-              <Card className="theme-card overflow-hidden">
-                <div className="h-1.5 bg-gradient-to-r from-[var(--app-accent)] to-[var(--app-accent-2)]" />
+              <Card className="course-card theme-card overflow-hidden">
+                <div className="course-card-cover">
+                  <span className="design-eyebrow">CLASSROOM</span>
+                  <BookOpen className="course-cover-icon" aria-hidden="true" />
+                  <span className="course-cover-geometry" aria-hidden="true" />
+                </div>
                 <CardContent className="space-y-4 p-5">
                   <div>
                     <p className="text-lg font-bold text-[var(--app-text)]">{classroom.name}</p>
                     <p className="mt-1 text-sm theme-muted line-clamp-2">{classroom.description}</p>
+                    <p className="mt-1 text-sm theme-muted">{classroom.departmentCode || "Department unassigned"} / {classroom.yearLevel ? `Year ${classroom.yearLevel}` : "Year level unassigned"}</p>
+                    <p className="mt-1 text-sm theme-muted">{semesterLabel(classroom.semester ?? 1)}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="course-card-metrics grid grid-cols-2 gap-3">
                     <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] p-3">
                       <p className="text-xs theme-muted">Students</p>
                       <p className="text-lg font-bold text-[var(--app-text)]">{classroom.students}</p>
@@ -103,7 +110,7 @@ export function TeacherClassesSection({
                     </Button>
                   </div>
 
-                  <Button onClick={() => onManageClass(classroom)}>Manage Class</Button>
+                  <Button className="w-full" onClick={() => onManageClass(classroom)}>Manage Class</Button>
                 </CardContent>
               </Card>
             </motion.div>

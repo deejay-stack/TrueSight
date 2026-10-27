@@ -52,7 +52,8 @@ def explain_text(detector, text, inputs, offsets, baseline):
                     "impactPercentagePoints": (baseline - score) * 100,
                 })
     return {
-        "status": "completed", "method": "sentence_occlusion", "version": 1,
+        "status": "completed", "method": "sentence_occlusion", "version": 2,
+        "baselineAiProbability": baseline,
         "analyzedText": excerpt, "sentences": results,
         "evaluatedTokens": int(inputs["attention_mask"].sum().item()),
         "maxTokens": 512, "truncated": bool(text[evaluated_end:].strip()),

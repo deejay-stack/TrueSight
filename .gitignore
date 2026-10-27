@@ -18,7 +18,9 @@ backend/dist/
 .env.production.local
 frontend/.env
 backend/.env
+backend/code-sandbox-approval.local.json
 *.local
+backend/tests/private-evaluation.manifest.json
 
 # Python
 __pycache__/

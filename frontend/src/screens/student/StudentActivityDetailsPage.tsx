@@ -1,3 +1,4 @@
+import { ActivityRating } from "./components/ActivityRating";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -105,7 +106,7 @@ export default function StudentActivityDetailsPage() {
 
   return (
     <div
-      className="role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
+      className="workspace-detail-page role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
       style={getRoleThemeStyle("student", darkMode)}
     >
       <header className="fixed left-0 right-0 top-0 z-20 h-16 border-b theme-border bg-[color-mix(in_srgb,var(--app-bg)_72%,transparent)] backdrop-blur-xl">
@@ -374,7 +375,8 @@ export default function StudentActivityDetailsPage() {
                   </Card>
                 )}
 
-                {submission && (
+                {submission && submission.teacherScore !== null && <ActivityRating key={activity.id} activityId={activity.id} />}
+                {submission && submission.teacherScore === null && (
                   <Card className="theme-card">
                     <CardContent className="space-y-3 p-5">
                       <h2 className="text-lg font-semibold text-[var(--app-text)]">
@@ -394,7 +396,7 @@ export default function StudentActivityDetailsPage() {
                             <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] p-3">
                               <p className="text-xs theme-muted">Grade</p>
                               <p className="font-semibold text-[var(--app-text)]">
-                                {submission.teacherGrade ?? "Not set"}
+                                {submission.teacherGrade ?? (submission.teacherScore !== null ? `${Number((submission.teacherScore / activity.maxScore * 100).toFixed(2))}%` : "Not set")}
                               </p>
                             </div>
                           </div>

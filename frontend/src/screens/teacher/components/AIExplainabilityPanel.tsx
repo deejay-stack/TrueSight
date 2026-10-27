@@ -134,7 +134,9 @@ export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
           ))}
         </div>
 
-        <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
+        <details className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--app-text)]">Advanced details: how the model returned this decision</summary>
+          <div className="mt-4">
           <div className="mb-2 flex items-center gap-2">
             {reasons.length > 0 ? (
               <AlertTriangle className="h-4 w-4 text-[var(--status-warning)]" />
@@ -158,7 +160,8 @@ export function AIExplainabilityPanel({ details }: AIExplainabilityPanelProps) {
               ))}
             </div>
           )}
-        </div>
+          </div>
+        </details>
       </CardContent>
     </Card>
   );

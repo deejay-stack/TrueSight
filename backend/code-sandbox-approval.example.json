@@ -1,0 +1,20 @@
+{
+  "apiUrl": "https://your-dedicated-judge0.example",
+  "verified": false,
+  "reviewedBy": "",
+  "verifiedAt": "",
+  "expiresAt": "",
+  "languages": { "java": false, "javascript": false, "python": false, "dart": false },
+  "javaPublicClassNames": false,
+  "controls": {
+    "dedicatedHost": false,
+    "unprivilegedIsolation": false,
+    "noHostMounts": false,
+    "noApplicationSecrets": false,
+    "networkDisabled": false,
+    "cpuMemoryLimits": false,
+    "processLimits": false,
+    "outputLimits": false,
+    "temporaryWorkspaceCleanup": false
+  }
+}

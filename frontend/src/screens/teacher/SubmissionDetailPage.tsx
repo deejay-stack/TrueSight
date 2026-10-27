@@ -1,4 +1,9 @@
-﻿import { useEffect, useState } from "react";
+import { RubricScoringTable } from "./components/RubricScoringTable";
+import { lmsRequest, type RubricAssessment } from "../../services/lmsService";
+import { SubmissionReviewWorkspace } from "./components/SubmissionReviewWorkspace";
+import {codeRequest,loadCodeWorkspace,type CodeTestResult} from '../../services/codeWorkspaceService';
+import {TeacherCodeResults} from '../../components/code/TeacherCodeResults';
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -38,9 +43,7 @@ import {
   type TeacherSection,
 } from "./components/TeacherSidebar";
 import { navigateBack } from "../../utils/navigation";
-import { CodeEditor } from "../../components/code/CodeEditor";
 import { AIExplainabilityPanel } from "./components/AIExplainabilityPanel";
-import { TextEvidencePanel } from "./components/TextEvidencePanel";
 import {
   getProgrammingLanguageLabel,
   runCode,
@@ -70,9 +73,9 @@ const isImageSubmission = (submission: ClassSubmission | null): boolean => {
 };
 
 const getImageVerdictTone = (prediction: string, aiProbability: number | null) => {
-  if (prediction === "AI-generated") return "bg-[var(--heatmap-ai-bg)] text-[var(--heatmap-ai-text)]";
-  if (prediction === "Human") return "bg-[var(--heatmap-human-bg)] text-[var(--heatmap-human-text)]";
-  if (prediction === "Needs Review") {
+  if (prediction === "Possibly AI-Generated" || prediction === "AI-likely" || prediction === "AI-generated") return "bg-[var(--heatmap-ai-bg)] text-[var(--heatmap-ai-text)]";
+  if (prediction === "Possibly Human-Created" || prediction === "Human-likely" || prediction === "Human") return "bg-[var(--heatmap-human-bg)] text-[var(--heatmap-human-text)]";
+  if (prediction === "Inconclusive" || prediction === "Needs Review") {
     return "bg-[var(--heatmap-suspicious-bg)] text-[var(--heatmap-suspicious-text)]";
   }
   if (typeof aiProbability === "number") {
@@ -113,25 +116,49 @@ export default function SubmissionDetailPage() {
     score: "",
   });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+  const [assessment, setAssessment] = useState<RubricAssessment | null>(null);
+  const [isGeneratingAssessment, setIsGeneratingAssessment] = useState(false);
+  const [rubricScores, setRubricScores] = useState<Record<string, string>>({});
+  const [override, setOverride] = useState(false);
+  const [adjustmentNote, setAdjustmentNote] = useState('');
+  const rubricCriteria = submission?.rubric ?? [];
+  const rubricTotal = Number(rubricCriteria.reduce((total, c) => total + Number(rubricScores[c.id] || 0), 0).toFixed(2));
+  const scoringComplete = rubricCriteria.every(c => rubricScores[c.id] !== undefined && rubricScores[c.id].trim() !== '' && Number.isFinite(Number(rubricScores[c.id])) && Number(rubricScores[c.id]) >= 0 && Number(rubricScores[c.id]) <= c.maxPoints);
+  const finalPreview = override ? Number(evaluationForm.score) : rubricTotal;
   const [codeInput, setCodeInput] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
   const [codeRunSummary, setCodeRunSummary] = useState("");
   const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [isRunningCode, setIsRunningCode] = useState(false);
+  const [codeTests,setCodeTests]=useState<{submissionId:string;result:CodeTestResult}|null>(null);
+  const [isRunningTests,setIsRunningTests]=useState(false);
+  const [executionRefresh,setExecutionRefresh]=useState(0);
+  const [codeExecution,setCodeExecution]=useState<{id:string;enabled:boolean;message:string;testCount:number}|null>(null);
+  useEffect(()=>{
+    if(!submission||submission.submissionType!=='code')return;let active=true;
+    void loadCodeWorkspace(submission.activityId).then(data=>{if(active)setCodeExecution({id:submission.id,...data.execution,testCount:data.settings.testCases.length});}).catch(e=>{if(active)setCodeExecution({id:submission.id,enabled:['html','css'].includes((submission.programmingLanguage??'').toLowerCase()),message:e instanceof Error?e.message:'Execution is unavailable.',testCount:0});});
+    return()=>{active=false;};
+  },[submission,executionRefresh]);
 
+  const loadSequence = useRef(0);
+  const currentSubmissionId = useRef(submissionId);
+  const invalidateSubmission = () => { loadSequence.current++; currentSubmissionId.current = undefined; };
   const loadSubmission = async () => {
-    if (!submissionId) return;
+    if (!submissionId || currentSubmissionId.current !== submissionId) return;
+    const requestSequence = ++loadSequence.current;
+    const isCurrent = () => requestSequence === loadSequence.current && currentSubmissionId.current === submissionId;
 
     setLoading(true);
     try {
       const response = await fetchSubmissionDetail(submissionId);
-      setSubmission(response);
+      if (isCurrent() && response.id === submissionId) setSubmission(response);
     } catch (error) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : "Failed to load submission.";
       toast.error(message);
       setSubmission(null);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -150,13 +177,22 @@ export default function SubmissionDetailPage() {
   };
 
   useEffect(() => {
+    currentSubmissionId.current = submissionId;
+    setSubmission(null);
     void Promise.all([loadSubmission(), loadNotifications()]);
+    return invalidateSubmission;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submissionId]);
 
   useEffect(() => {
     if (!submission) return;
 
+    setAssessment(submission.aiAssessment ?? null);
+    const suggested = Object.fromEntries((submission.aiAssessment?.criteria ?? []).filter(c => c.score !== null).map(c => [c.criterionId, String(c.score)]));
+    const recorded = Object.fromEntries(Object.entries(submission.rubricScores ?? {}).map(([id, score]) => [id, String(score)]));
+    setRubricScores(submission.teacherScore === null ? { ...suggested, ...recorded } : recorded);
+    setOverride(submission.scoreOverridden === true);
+    setAdjustmentNote(submission.adjustmentNote ?? '');
     setEvaluationForm({
       comments: submission.teacherComments ?? "",
       remarks: submission.teacherRemarks ?? "",
@@ -244,7 +280,7 @@ export default function SubmissionDetailPage() {
       const result = await analyzeSingleSubmission(submissionId);
       const confidenceText =
         typeof result.confidenceScore === "number"
-          ? ` (${result.confidenceScore.toFixed(2)}% confidence)`
+          ? ` (${result.confidenceScore.toFixed(2)}% largest class score)`
           : "";
       if (result.analysisDetails?.analysisStatus === "failed") toast.error("AI detection temporarily unavailable.");
       else toast.success(`Submission analyzed${confidenceText}.`);
@@ -273,6 +309,10 @@ export default function SubmissionDetailPage() {
       return;
     }
 
+    if (rubricCriteria.some(c => rubricScores[c.id]?.trim() === '' || rubricScores[c.id] === undefined || !Number.isFinite(Number(rubricScores[c.id])) || Number(rubricScores[c.id]) < 0 || Number(rubricScores[c.id]) > c.maxPoints)) {
+      toast.error('Enter a valid score for every rubric criterion.'); return;
+    }
+    if (rubricCriteria.length && override && parsedScore === null) { toast.error('Enter an adjusted final score.'); return; }
     setIsSavingEvaluation(true);
 
     try {
@@ -280,7 +320,10 @@ export default function SubmissionDetailPage() {
         comments: evaluationForm.comments.trim(),
         remarks: evaluationForm.remarks.trim(),
         grade: evaluationForm.grade.trim(),
-        score: parsedScore,
+        score: rubricCriteria.length && !override ? rubricTotal : parsedScore,
+        submittedVersion: submission.submittedVersion,
+        approve: true,
+        ...(rubricCriteria.length ? { rubricScores, override, adjustmentNote } : {}),
       });
       toast.success("Evaluation saved.");
       await loadSubmission();
@@ -298,7 +341,7 @@ export default function SubmissionDetailPage() {
       !submission ||
       submission.submissionType !== "code" ||
       !submission.contentText?.trim() ||
-      isRunningCode
+      isRunningCode || isRunningTests || codeExecution?.id!==submission.id || !codeExecution.enabled
     ) {
       return;
     }
@@ -313,11 +356,13 @@ export default function SubmissionDetailPage() {
         submission.contentText,
         submission.programmingLanguage,
         codeInput,
+        submission.activityId,
       );
       setCodeOutput(result.output);
       setCodeRunSummary(
         [
           result.status,
+          result.notice,
           result.runtime,
           result.executionTime ? `${result.executionTime}s` : "",
           typeof result.memory === "number"
@@ -333,37 +378,15 @@ export default function SubmissionDetailPage() {
     }
   };
 
-  const renderSubmissionContent = () => {
-    if (!submission) return null;
-
-    if (submission.contentText?.trim()) {
-      if (submission.submissionType === "code") {
-        return (
-          <CodeEditor
-            value={submission.contentText}
-            language={submission.programmingLanguage}
-            readOnly
-            minHeight={460}
-            darkMode={darkMode}
-            ariaLabel={`${getProgrammingLanguageLabel(submission.programmingLanguage)} submitted code`}
-          />
-        );
-      }
-
-      return (
-        <pre
-          className="max-h-[360px] overflow-auto whitespace-pre-wrap rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm text-[var(--app-text)]"
-        >
-          {submission.contentText}
-        </pre>
-      );
-    }
-
-    return (
-      <div className="rounded-xl border border-dashed theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4 text-sm theme-muted">
-        No typed essay content is available for this submission.
-      </div>
-    );
+  const handleRunTests=async()=>{
+    if(!submission||!submission.contentText?.trim()||isRunningCode||isRunningTests||codeExecution?.id!==submission.id||!codeExecution.enabled||!codeExecution.testCount)return;
+    const id=submission.id;
+    setIsRunningTests(true);
+    try{
+      const data=await codeRequest<{result:CodeTestResult}>(submission.activityId,'tests',{sourceCode:submission.contentText});
+      setCodeTests({submissionId:id,result:data.result});
+    }catch(error){toast.error(error instanceof Error?error.message:'Unable to run the configured tests.');}
+    finally{setIsRunningTests(false);}
   };
 
   const analysisDetails = isRecord(submission?.analysisDetails)
@@ -374,21 +397,18 @@ export default function SubmissionDetailPage() {
       ? analysisDetails.verdict
       : "Not analyzed yet";
   const finalPrediction =
-    analysisDetails && typeof analysisDetails.finalPrediction === "string"
-      ? analysisDetails.finalPrediction
+    analysisDetails && typeof analysisDetails.decisionLabel === "string"
+      ? analysisDetails.decisionLabel
       : verdict;
   const analysisMessage =
     analysisDetails && typeof analysisDetails.message === "string"
       ? analysisDetails.message
       : null;
-  const threshold =
-    analysisDetails && typeof analysisDetails.threshold === "number"
-      ? analysisDetails.threshold
-      : null;
+
 
   return (
     <div
-      className="role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
+      className="workspace-detail-page role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
       style={getRoleThemeStyle("teacher", darkMode)}
     >
       <TeacherSidebar
@@ -557,10 +577,11 @@ export default function SubmissionDetailPage() {
                     )}
                   </div>
                   {submission.submissionType === "code" && (
+                    <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       onClick={() => void handleRunCode()}
-                      disabled={isRunningCode || !submission.contentText?.trim()}
+                      disabled={isRunningCode || isRunningTests || !submission.contentText?.trim()||codeExecution?.id!==submission.id||!codeExecution.enabled}
                     >
                       {isRunningCode ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -569,6 +590,10 @@ export default function SubmissionDetailPage() {
                       )}
                       {isRunningCode ? "Running..." : "Run Code"}
                     </Button>
+                    <Button size="sm" variant="outline" onClick={()=>void handleRunTests()} disabled={isRunningCode||isRunningTests||!submission.contentText?.trim()||codeExecution?.id!==submission.id||!codeExecution.enabled||!codeExecution.testCount}>
+                      {isRunningTests?'Running tests...':'Run Tests'}
+                    </Button>
+                    </div>
                   )}
                 </div>
                 {submission.fileName && (
@@ -581,7 +606,18 @@ export default function SubmissionDetailPage() {
                     {submission.fileName}
                   </button>
                 )}
-                {renderSubmissionContent()}
+                <SubmissionReviewWorkspace key={submission.id} submission={submission} darkMode={darkMode} />
+                {submission.submissionType==='code'&&<>
+                  <p role="status" className="text-sm theme-muted">{codeExecution?.id===submission.id?codeExecution.message:'Loading execution availability...'}</p>
+                  <Button size="sm" variant="outline" disabled={isRunningCode||isRunningTests} onClick={()=>{setCodeExecution(null);setExecutionRefresh(value=>value+1);}}>Refresh execution status</Button>
+                  {codeExecution?.id===submission.id&&!codeExecution.testCount&&<p className="text-sm theme-muted">Run Tests needs test cases. Add them in the activity's programming settings.</p>}
+                  {codeTests?.submissionId===submission.id&&<section aria-label="Teacher test results" className="min-w-0 space-y-2 rounded-lg border theme-border p-3 text-sm">
+                    <p className="font-semibold">{codeTests.result.passed}/{codeTests.result.total} tests passed</p>
+                    <p className="theme-muted">Includes configured public and hidden teacher tests. This practice run does not change the student's submission or official grade.</p>
+                    {codeTests.result.tests.map((test,index)=><details key={index}><summary className="cursor-pointer">{test.name||`Test ${index+1}`} {test.hidden?'(hidden)':''}: {test.passed?'Passed':'Failed'}</summary><p>Input</p><pre className="max-h-60 overflow-auto whitespace-pre">{test.stdin}</pre><p>Expected output</p><pre className="max-h-60 overflow-auto whitespace-pre">{test.expectedOutput}</pre><p>{test.result?.status}</p><p>Actual output</p><pre className="max-h-60 overflow-auto whitespace-pre">{test.result?.stdout}</pre><pre className="max-h-60 overflow-auto whitespace-pre">{test.result?.stderr||test.result?.compileOutput}</pre></details>)}
+                  </section>}
+                  <TeacherCodeResults activityId={submission.activityId} studentId={submission.studentId} version={submission.submittedVersion}/>
+                </>}
 
                 {submission.submissionType === "code" && (
                   <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.35fr)_minmax(0,1fr)]">
@@ -679,7 +715,7 @@ export default function SubmissionDetailPage() {
                         </p>
                       </div>
                       <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] p-3">
-                        <p className="text-xs theme-muted">Confidence</p>
+                        <p className="text-xs theme-muted">Largest class score</p>
                         <p className="text-lg font-bold text-[var(--app-text)]">
                           {typeof submission.confidenceScore === "number"
                             ? `${submission.confidenceScore.toFixed(2)}%`
@@ -687,7 +723,7 @@ export default function SubmissionDetailPage() {
                         </p>
                       </div>
                       <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] p-3">
-                        <p className="text-xs theme-muted">AI probability</p>
+                        <p className="text-xs theme-muted">AI model score</p>
                         <p className="text-lg font-bold text-[var(--app-text)]">
                           {typeof submission.aiProbability === "number"
                             ? `${submission.aiProbability.toFixed(2)}%`
@@ -718,14 +754,10 @@ export default function SubmissionDetailPage() {
                           ? "Likely Human-created"
                           : finalPrediction}
                     </p>
-                    {threshold !== null && (
-                      <p className="mt-1 text-xs theme-muted">
-                        Threshold: {(threshold * 100).toFixed(8)}%
-                      </p>
-                    )}
+
                   </div>
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
-                    <p className="text-xs theme-muted">AI Probability</p>
+                    <p className="text-xs theme-muted">AI model score</p>
                     <p className="text-lg font-bold text-[var(--app-text)]">
                       {typeof submission.aiProbability === "number"
                         ? `${submission.aiProbability.toFixed(2)}%`
@@ -733,7 +765,7 @@ export default function SubmissionDetailPage() {
                     </p>
                   </div>
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
-                    <p className="text-xs theme-muted">Human Probability</p>
+                    <p className="text-xs theme-muted">Human model score</p>
                     <p className="text-lg font-bold text-[var(--app-text)]">
                       {typeof submission.humanProbability === "number"
                         ? `${submission.humanProbability.toFixed(2)}%`
@@ -741,7 +773,7 @@ export default function SubmissionDetailPage() {
                     </p>
                   </div>
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
-                    <p className="text-xs theme-muted">Confidence Score</p>
+                    <p className="text-xs theme-muted">Largest class score</p>
                     <p className="text-lg font-bold text-[var(--app-text)]">
                       {typeof submission.confidenceScore === "number"
                         ? `${submission.confidenceScore.toFixed(2)}%`
@@ -760,7 +792,6 @@ export default function SubmissionDetailPage() {
             </Card>
 
             <AIExplainabilityPanel details={submission.analysisDetails} />
-            <TextEvidencePanel key={submission.updatedAt} details={submission.analysisDetails} />
 
             <Card className="theme-card">
               <CardContent className="space-y-4 p-5">
@@ -773,6 +804,20 @@ export default function SubmissionDetailPage() {
                   </p>
                 </div>
 
+                {rubricCriteria.length > 0 && <div className="space-y-3 rounded-xl border theme-border p-3">
+                  <RubricScoringTable criteria={rubricCriteria} scores={rubricScores} onChange={setRubricScores} assessment={assessment} enabled={submission.aiScoringEnabled === true} generating={isGeneratingAssessment} onGenerate={() => {
+                    setIsGeneratingAssessment(true);
+                    void lmsRequest<{ assessment: RubricAssessment }>(`/submissions/${submission.id}/assessment`, {}, 'POST')
+                      .then(result => setAssessment(result.assessment))
+                      .catch(error => toast.error(error instanceof Error ? error.message : 'Unable to generate suggestions.'))
+                      .finally(() => setIsGeneratingAssessment(false));
+                  }} />
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={override} onChange={e => { setOverride(e.target.checked); if (e.target.checked && !evaluationForm.score) setEvaluationForm(previous => ({ ...previous, score: String(rubricTotal) })); }} />Manually adjust the final score</label>
+                  {scoringComplete ? <p className="text-sm font-semibold">Final score: {Number.isFinite(finalPreview) ? finalPreview : 'Invalid'}/{submission.maxScore} · {Number.isFinite(finalPreview) ? Number((finalPreview / submission.maxScore * 100).toFixed(2)) : 'Invalid'}%</p> : <p className="text-sm theme-muted">Official score pending: complete the teacher scoring column before approval.</p>}
+                  {override && <label className="block text-sm">Adjustment note (optional)<textarea aria-label="Grade adjustment note" maxLength={10000} className="theme-ring w-full rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)] p-2 text-[var(--app-text)]" value={adjustmentNote} onChange={e => setAdjustmentNote(e.target.value)} /></label>}
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setOverride(false); setAdjustmentNote(''); setEvaluationForm(previous => ({ ...previous, score: String(rubricTotal), grade: '' })); }}>Restore computed grade</Button>
+                  <p className="text-xs theme-muted">Approve the official grade to publish these changes. Adjusted scores stay in place when criteria are recalculated.</p>
+                </div>}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase tracking-wide theme-muted">
@@ -783,7 +828,8 @@ export default function SubmissionDetailPage() {
                       min={0}
                       max={submission.maxScore}
                       step="0.01"
-                      value={evaluationForm.score}
+                      disabled={rubricCriteria.length > 0 && !override}
+                      value={rubricCriteria.length > 0 && !override ? rubricTotal : evaluationForm.score}
                       onChange={(event) =>
                         setEvaluationForm((previous) => ({
                           ...previous,
@@ -861,7 +907,7 @@ export default function SubmissionDetailPage() {
                   ) : (
                     <Save className="mr-2 h-4 w-4" />
                   )}
-                  {isSavingEvaluation ? "Saving..." : "Save Evaluation"}
+                  {isSavingEvaluation ? "Saving..." : "Approve and publish official grade"}
                 </Button>
               </CardContent>
             </Card>

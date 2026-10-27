@@ -362,7 +362,7 @@ def main():
 def run_all_models_worker():
     """Extend the existing JSON-lines worker; one process, one copy per model."""
     from contextlib import redirect_stdout
-    from local_detectors import MODELS, MODEL_NAMES, TextDetector, CodeDetector, normalize_result
+    from local_detectors import MODELS, MODEL_NAMES, TextDetector, CodeDetector, normalize_result, artifact_version
 
     runtimes = {}
     health = {}
@@ -381,6 +381,8 @@ def run_all_models_worker():
             # Libraries must not corrupt the JSON-lines response stream.
             with redirect_stdout(sys.stderr):
                 runtimes[detector_type] = loader()
+                if detector_type == "image":
+                    runtimes["image"]["modelVersion"] = artifact_version(MODELS / "image_detector" / "efficientnetv2_ai_human.keras", MODEL_NAMES["image"])
             health[detector_type] = {"loaded": True, "model": MODEL_NAMES[detector_type]}
             print(f"[ai-model] Loaded {MODEL_NAMES[detector_type]}", file=sys.stderr, flush=True)
         except (Exception, SystemExit) as error:
@@ -403,6 +405,7 @@ def run_all_models_worker():
                     image_bytes = base64.b64decode(payload["image"], validate=True)
                     result = predict_image_bytes(runtimes["image"], image_bytes)
                     result.update(normalize_result("image", result["aiProbability"], 0.50))
+                    result["modelVersion"] = runtimes["image"]["modelVersion"]
                     # Strict > at 0.50, including the exact equality boundary.
                     result["label"] = result["modelLabel"]
                     result["message"] = "Likely AI-generated image." if result["predictedLabel"] == "AI" else "Likely human-created image."

@@ -10,6 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ActivityNotification } from "../services/classService";
+import { notificationHasTarget } from '../utils/notificationTarget';
 
 type ActivityNotificationsPopoverProps = {
   notifications: ActivityNotification[];
@@ -85,6 +86,9 @@ export function ActivityNotificationsPopover({
   return (
     <div className="relative" ref={containerRef}>
       <button
+        type="button"
+        aria-label="Notifications"
+        aria-expanded={open}
         onClick={onToggle}
         className="theme-ring inline-flex h-10 w-10 items-center justify-center rounded-xl border theme-border text-[var(--app-muted)] hover:bg-[color-mix(in_srgb,var(--app-accent)_10%,transparent)] active:scale-90"
       >
@@ -125,7 +129,7 @@ export function ActivityNotificationsPopover({
           ) : (
             <div className="max-h-[calc(100vh-12rem)] space-y-2 overflow-y-auto pr-1 sm:max-h-80">
               {notifications.map((notification) => {
-                const clickable = Boolean(onNotificationClick && notification.activityId);
+                const clickable = Boolean(onNotificationClick && notificationHasTarget(notification));
 
                 return (
                   <div
@@ -138,7 +142,7 @@ export function ActivityNotificationsPopover({
                       }
                     }}
                     onKeyDown={(event) => {
-                      if (!clickable) return;
+                      if (!clickable || event.target !== event.currentTarget) return;
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         onNotificationClick?.(notification);
@@ -155,7 +159,7 @@ export function ActivityNotificationsPopover({
                     ].join(" ")}
                   >
                   <div className="mb-1 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       {notification.type === "new_submission" ? (
                         <Send className="h-4 w-4 text-[var(--app-accent)]" />
                       ) : notification.type === "new_activity" ? (
@@ -165,7 +169,7 @@ export function ActivityNotificationsPopover({
                       ) : (
                         <CalendarClock className="h-4 w-4 text-[var(--status-warning)]" />
                       )}
-                      <p className="text-xs font-semibold text-[var(--app-text)]">
+                      <p className="min-w-0 break-words text-xs font-semibold text-[var(--app-text)]">
                         {notification.title}
                       </p>
                     </div>
@@ -173,10 +177,10 @@ export function ActivityNotificationsPopover({
                       {formatEventTime(notification.eventAt)}
                     </span>
                   </div>
-                  <p className="text-xs text-[var(--app-text)]">{notification.message}</p>
+                  <p className="break-words text-xs text-[var(--app-text)]">{notification.message}</p>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[11px] theme-muted">
-                      {notification.className} | {notification.activityTitle}
+                      {notification.className}{notification.activityId ? ` | ${notification.activityTitle}` : ''}
                     </p>
                     <div className="flex items-center gap-1.5">
                       <span className="rounded-full border theme-border px-2 py-0.5 text-[10px] font-semibold theme-muted">

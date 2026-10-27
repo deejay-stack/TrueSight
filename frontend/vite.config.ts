@@ -9,6 +9,8 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return
+          if (id.includes('pdfjs-dist')) return 'pdf-preview-vendor'
+          if (id.includes('mammoth')) return 'docx-preview-vendor'
           if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
             return 'react-vendor'
           }

@@ -8,6 +8,7 @@ import { LogoutConfirmationDialog } from "../../../components/LogoutConfirmation
 export type TeacherSection =
   | "home"
   | "classes"
+  | "subjects"
   | "students"
   | "uploads"
   | "activities"

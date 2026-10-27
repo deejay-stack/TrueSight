@@ -1,5 +1,7 @@
+import { AcademicVerificationPanel } from "../../../components/AcademicVerificationPanel";
+import { Settings2, AlertTriangle, Bell, Palette, Save, Trash2, UserRound } from "lucide-react";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, Palette, Save, Trash2, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
@@ -122,12 +124,10 @@ export function StudentSettingsPanel({ onAccountDeleted }: StudentSettingsPanelP
   };
 
   return (
-    <Card className="theme-card max-w-3xl">
+    <Card className="settings-card theme-card max-w-3xl">
       <CardContent className="space-y-5 p-5">
-        <div>
-          <p className="text-sm theme-muted">Student Account</p>
-          <h2 className="text-2xl font-bold text-[var(--app-text)]">Settings</h2>
-        </div>
+        <AcademicVerificationPanel />
+      <WorkspaceHeading eyebrow="YOUR ACCOUNT" title="Your settings." description="Manage your student profile, appearance, and notification preferences." icon={Settings2} />
 
         <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_96%,transparent)] p-4">
           <div className="mb-3 flex items-center gap-2">

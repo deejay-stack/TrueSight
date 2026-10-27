@@ -1,5 +1,7 @@
+import { GraduationCap, ArrowRight, FileText } from "lucide-react";
+import { WorkspaceEmptyState } from "../../../components/WorkspaceEmptyState";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
 import { motion } from "framer-motion";
-import { ArrowRight, FileText } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
 import type {
@@ -38,12 +40,7 @@ export function StudentEnrolledSection({
 }: StudentEnrolledSectionProps) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--app-text)]">Enrolled Classes</h2>
-        <p className="text-sm theme-muted">
-          Browse all your classes and submit activities per class.
-        </p>
-      </div>
+      <WorkspaceHeading eyebrow="LEARNING / YOUR CLASSES" title="Enrolled Classes" description="Find your next assignment, explore class activities, and keep your learning moving." icon={GraduationCap} />
 
       {isLoadingClasses ? (
         <Card className="theme-card">
@@ -51,9 +48,7 @@ export function StudentEnrolledSection({
         </Card>
       ) : enrolledClasses.length === 0 ? (
         <Card className="theme-card">
-          <CardContent className="p-6 text-sm theme-muted">
-            You are not enrolled in any classes yet. Use a class code to join.
-          </CardContent>
+          <WorkspaceEmptyState icon={GraduationCap} title="Your learning starts with a class" description="Use the enrollment form on Home to request access with your class code." />
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[340px_1fr]">

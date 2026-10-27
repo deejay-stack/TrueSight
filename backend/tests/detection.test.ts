@@ -35,3 +35,10 @@ test("empty written content fails without fabricated probabilities", async () =>
   assert.equal(result.details.analysisStatus, "failed");
   assert.equal(result.humanProbability, null);
 });
+
+test('legacy DOC and image attachments without extractable text fail clearly instead of inventing an analysis', async () => {
+  for (const file_name of ['legacy.doc', 'scan.png']) {
+    const result = await analyzeSubmissionContent({ submission_type: 'file', file_name, file_data_url: 'data:application/octet-stream;base64,AA==' });
+    assert.equal(result.details.analysisStatus, 'failed'); assert.equal(result.aiProbability, null); assert.equal(result.isAIGenerated, null);
+  }
+});

@@ -1,6 +1,7 @@
+import { Files, Loader2, RefreshCw, WandSparkles } from "lucide-react";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Loader2, RefreshCw, WandSparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardContent } from "../../../components/ui/Card";
@@ -93,10 +94,7 @@ export function TeacherSubmissionsSection({ classes, isLoadingClasses, online, o
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--app-text)]">Student Submissions</h2>
-        <p className="text-sm theme-muted">Open a submission to review its content and AI analysis.</p>
-      </div>
+      <WorkspaceHeading eyebrow="REVIEW / SUBMISSIONS" title="Student Submissions" description="Every submission, one clear view. Open student work to explore its content and AI analysis." icon={Files} />
       <Card className="theme-card">
         <CardContent className="space-y-4 p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">

@@ -1,3 +1,12 @@
+import { prepareEnrollment, enrollmentColumns, enrollmentJoins, enrollmentRecord, projectEnrollment, enrollmentNotification } from '../services/EnrollmentWorkflow.js';
+import { randomInt, randomUUID } from 'node:crypto';
+import { validateCorUpload } from '../services/CorUpload.js';
+import curriculumRoutes from './curriculum.js';
+import academicRoutes from './academics.js';
+import codeRoutes from './code.js';
+import {checkCodeSubmission,codeActivity,codeConfigurationKey,codeSettings,ensureCodeSchema,executionAvailability,recordCodeRun} from '../services/CodeWorkbench.js';
+import { academicSelection, curriculumJoin, curriculumColumns, subjectEligibility, requireClassSubject, semesterSelection } from '../services/CollegeEnrollment.js';
+import { authoritativeSubmission } from '../services/DetectionResult.js';
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
@@ -6,17 +15,26 @@ import pool from "../config/db.js";
 import { analyzeSubmissionContent } from "../services/DetectorRouter.js";
 import {
   CodeExecutionError,
-  executeCode,
+  normalizeExecutionLanguage,
 } from "../services/CodeExecutionService.js";
+
+import lmsRoutes, { saveEvaluation } from './lms.js';
+import { ensureLmsSchema, rubric, round, gradeLevel, verifyEnrollment, assessSubmission, publicRubric, scoringEnabled } from '../services/LmsGrading.js';
 
 const router = express.Router();
 
 let schemaReady = false;
+const generateStudentJoinCode = () => {
+  const letters = (length: number) => Array.from({ length }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[randomInt(26)]).join('');
+  return `${letters(3)}${randomInt(1000).toString().padStart(3, '0')}-${letters(2)}${randomInt(10)}`;
+};
 
 const notificationTypes = new Set([
   "new_activity",
   "upcoming_deadline",
   "new_submission",
+  "enrollment_request",
+  "enrollment_review",
 ]);
 const notificationStatuses = new Set(["unread", "read"]);
 const CODE_EXECUTION_WINDOW_MS = 60_000;
@@ -274,6 +292,8 @@ const ensureClassroomSchema = async () => {
     WHERE dedupe_key IS NOT NULL
   `);
 
+  await ensureLmsSchema();
+  await ensureCodeSchema();
   schemaReady = true;
 };
 
@@ -322,6 +342,7 @@ const protect = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     req.user = user.rows[0];
+    res.set('Cache-Control', 'no-store');
     next();
   } catch {
     clearAuthCookie(res);
@@ -432,31 +453,6 @@ const isAllowedSubmissionUpload = (submissionType, fileName, fileType) => {
   }
 
   return false;
-};
-
-const normalizeCorUpload = ({ fileName, fileType, fileSize, fileDataUrl }) => {
-  const upload = normalizeDocumentUpload({
-    fileName,
-    fileType,
-    fileSize,
-    fileDataUrl,
-  });
-
-  if (!upload.fileName || !upload.fileDataUrl) {
-    const error: HttpStatusError = new Error("A COR image upload is required.");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!isAllowedImageSubmission(upload.fileName, upload.fileType)) {
-    const error: HttpStatusError = new Error(
-      "COR uploads only accept PNG, JPG, JPEG, or WEBP images.",
-    );
-    error.statusCode = 415;
-    throw error;
-  }
-
-  return upload;
 };
 
 const normalizeDocumentUpload = ({
@@ -1153,6 +1149,25 @@ const analyzeText = async (text) => {
   return buildAnalysisSummary(heuristicAnalysis);
 };
 
+router.get('/academic/options', protect, academicRoutes);
+router.use('/activities/:activityId/code',protect,codeRoutes);
+router.get('/academic/profile', protect, academicRoutes);
+router.post('/academic/verification-requests', protect, academicRoutes);
+router.post('/academic/verification-requests/:id/class-intent',protect,academicRoutes);
+router.get('/academic/enrollment-intents',protect,academicRoutes);
+router.patch('/academic/enrollment-intents/:id',protect,academicRoutes);
+router.patch('/academic/verification-requests/:id/cor', protect, academicRoutes);
+router.get('/academic/review', protect, academicRoutes);
+router.patch('/academic/review/:id', protect, academicRoutes);
+router.get('/curriculum', protect, curriculumRoutes);
+router.get('/curriculum/history', protect, curriculumRoutes);
+router.post('/curriculum', protect, curriculumRoutes);
+router.get('/eligible', protect, lmsRoutes);
+router.post('/submissions/:submissionId/assessment', protect, lmsRoutes);
+router.patch('/:classId/enrollment-settings', protect, lmsRoutes);
+router.patch('/activities/:activityId/rubric', protect, lmsRoutes);
+router.get('/activities/:activityId/rating', protect, lmsRoutes);
+
 const getStudentIdentityKey = (name, email) =>
   `${String(email ?? "")
     .trim()
@@ -1277,6 +1292,8 @@ const normalizeAcademicScore = (value, maxScore) => {
 
 const sanitizeStudentSubmission = (submission) => {
   if (!submission) return null;
+  submission = authoritativeSubmission(submission);
+  if (submission.grade_approved === false) submission = { ...submission, teacher_comments: null, teacher_remarks: null, teacher_grade: null, teacher_score: null, evaluated_at: null };
 
   return {
     id: submission.id,
@@ -1469,7 +1486,7 @@ router.get("/mine", protect, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT c.id, c.name, c.code, c.description, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
+      `SELECT c.id, c.name, c.code, c.description, c.grade_level, c.department_code, c.year_level, c.subject_id, c.semester, c.enrollment_open, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
               u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
        FROM classes c
        INNER JOIN users u ON u.id = c.teacher_id
@@ -1503,13 +1520,18 @@ router.get("/notifications", protect, async (req, res) => {
       `SELECT n.id, n.type, n.severity, n.title, n.message,
               n.class_id, c.name AS class_name,
               n.activity_id, a.title AS activity_title, a.due_date,
-              n.related_submission_id, n.status, n.read_at, n.created_at
+              n.related_submission_id, n.status, n.read_at, n.created_at,
+              COALESCE(CASE WHEN n.dedupe_key ~ '^(teacher|student):enrollment:[0-9]+$' THEN split_part(n.dedupe_key,':',3) END,ni.enrollment_request_id::text,linked_enrollment.id::text) AS enrollment_request_id,
+              CASE WHEN n.dedupe_key ~ '^academic-intent:[0-9]+$' OR n.dedupe_key ~ '^academic-intent-review:[0-9]+:(accepted|rejected)$' THEN split_part(n.dedupe_key,':',2) END AS academic_intent_id
        FROM notifications n
        LEFT JOIN classes c ON c.id = n.class_id
        LEFT JOIN activities a ON a.id = n.activity_id
+       LEFT JOIN academic_enrollment_intents ni ON ni.id=CASE WHEN n.dedupe_key ~ '^academic-intent:[0-9]+$' OR n.dedupe_key ~ '^academic-intent-review:[0-9]+:(accepted|rejected)$' THEN split_part(n.dedupe_key,':',2)::bigint END
+       LEFT JOIN LATERAL (SELECT cer.id FROM class_enrollment_requests cer JOIN academic_verification_requests ar ON ar.id=ni.academic_request_id
+         WHERE cer.class_id=ni.class_id AND cer.student_id=ar.student_id AND cer.submitted_at>=ni.created_at ORDER BY cer.submitted_at DESC,cer.id DESC LIMIT 1) linked_enrollment ON TRUE
        WHERE n.user_id = $1
          AND n.receiver_role = $2
-         AND ($2 <> 'teacher' OR n.type = 'new_submission')
+         AND ($2 <> 'teacher' OR n.type IN ('new_submission','enrollment_request'))
        ORDER BY n.created_at DESC, n.id DESC
        LIMIT 100`,
       [req.user.id, role],
@@ -1521,6 +1543,8 @@ router.get("/notifications", protect, async (req, res) => {
       severity: notification.severity === "warning" ? "warning" : "info",
       classId: notification.class_id ? String(notification.class_id) : "",
       className: notification.class_name ?? "Unknown class",
+      enrollmentRequestId: notification.enrollment_request_id ?? null,
+      academicIntentId: notification.academic_intent_id ?? null,
       activityId: notification.activity_id ? String(notification.activity_id) : "",
       activityTitle: notification.activity_title ?? "Activity unavailable",
       title: notification.title,
@@ -1611,7 +1635,7 @@ router.get("/teacher/overview", protect, async (req, res) => {
     const [classesResult, activitiesResult, enrollmentsResult] =
       await Promise.all([
         pool.query(
-          `SELECT c.id, c.name, c.code, c.description, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
+          `SELECT c.id, c.name, c.code, c.description, c.grade_level, c.department_code, c.year_level, c.subject_id, c.semester, c.enrollment_open, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
                 u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
          FROM classes c
          INNER JOIN users u ON u.id = c.teacher_id
@@ -1622,7 +1646,7 @@ router.get("/teacher/overview", protect, async (req, res) => {
         pool.query(
           `SELECT a.id, a.class_id, c.name AS class_name,
                 a.title, a.instructor, a.description, a.submission_type,
-                a.allow_resubmission, a.max_score, a.programming_language,
+                a.allow_resubmission, a.ai_scoring_enabled, a.rubric, a.max_score, a.programming_language,
                 a.starter_code, a.attachment_name, a.attachment_type,
                 a.attachment_size, a.due_date, a.created_at,
                 COALESCE((SELECT COUNT(*) FROM submissions s WHERE s.activity_id = a.id), 0)::int AS submission_count
@@ -1879,6 +1903,7 @@ router.get("/teacher/analytics", protect, async (req, res) => {
 });
 
 router.post("/", protect, async (req, res) => {
+  const db = await pool.connect();
   try {
     if (req.user.role !== "teacher") {
       return res
@@ -1886,26 +1911,48 @@ router.post("/", protect, async (req, res) => {
         .json({ message: "Only teachers can create classes." });
     }
 
-    const { name, code, description } = req.body;
+    const { description } = req.body;
+    const semester = semesterSelection(req.body.semester);
+    const selection = req.body.departmentCode === undefined && req.body.yearLevel === undefined ? null : academicSelection(req.body);
 
-    if (!name || !code || !description) {
+    if ((!req.body.subjectId && !req.body.name) || typeof description !== 'string' || !description.trim()) {
       return res
         .status(400)
-        .json({ message: "Please provide name, code, and description." });
+        .json({ message: "Select an official subject and provide a class description." });
+    }
+    if (req.body.code !== undefined && (typeof req.body.code !== 'string' || !req.body.code.trim() || req.body.code.trim().length > 20)) return res.status(400).json({ message: 'Invalid student join code.' });
+
+    await db.query('BEGIN');
+    const subjectId = req.body.subjectId == null ? null : await requireClassSubject(db, req.body.subjectId, selection ?? academicSelection(req.body), semester);
+    const subject = subjectId ? (await db.query('SELECT code,name FROM subjects WHERE id=$1', [subjectId])).rows[0] : null;
+    const name = subject ? `${subject.code} - ${subject.name}` : req.body.name;
+    let insert;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await db.query('SAVEPOINT generated_join_code');
+      try {
+        insert = await db.query(
+          `INSERT INTO classes (name, code, description, teacher_id, department_code, year_level, subject_id, semester, enrollment_open)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING id, name, code, description, grade_level, department_code, year_level, subject_id, semester, enrollment_open, teacher_id, student_count, assignment_count, created_at`,
+          [name, (req.body.code ?? generateStudentJoinCode()).trim().toUpperCase(), description.trim(), req.user.id, selection?.departmentCode ?? null, selection?.yearLevel ?? null, subjectId, semester, subjectId !== null],
+        );
+        await db.query('RELEASE SAVEPOINT generated_join_code');
+        break;
+      } catch (error) {
+        if (error.code !== '23505' || req.body.code !== undefined || attempt === 9) throw error;
+        await db.query('ROLLBACK TO SAVEPOINT generated_join_code');
+        await db.query('RELEASE SAVEPOINT generated_join_code');
+      }
     }
 
-    const insert = await pool.query(
-      `INSERT INTO classes (name, code, description, teacher_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, code, description, teacher_id, student_count, assignment_count, created_at`,
-      [name, String(code).toUpperCase(), description, req.user.id],
-    );
-
+    await db.query("COMMIT");
     return res.status(201).json({
       message: "Class created successfully.",
-      class: insert.rows[0],
+      class: { ...insert.rows[0], subject_code: subject?.code ?? null, subject_name: subject?.name ?? null },
     });
   } catch (error) {
+    await db.query("ROLLBACK");
+    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
     if (error.code === "23505") {
       return res.status(409).json({ message: "Class code already exists." });
     }
@@ -1914,32 +1961,11 @@ router.post("/", protect, async (req, res) => {
       message: "Failed to create class.",
       error: error.message,
     });
-  }
+  } finally { await db.query("ROLLBACK"); db.release(); }
 });
 
 router.post("/code/execute", protect, async (req, res) => {
-  try {
-    if (!consumeCodeExecutionAttempt(req.user.id)) {
-      return res.status(429).json({
-        message: "Code execution limit reached. Please wait a minute and try again.",
-      });
-    }
-
-    const result = await executeCode({
-      language: req.body.language,
-      sourceCode: req.body.sourceCode,
-      stdin: req.body.stdin,
-    });
-
-    return res.status(200).json({ result });
-  } catch (error) {
-    const statusCode =
-      error instanceof CodeExecutionError ? error.statusCode : 500;
-    const message =
-      error instanceof Error ? error.message : "Failed to execute code.";
-
-    return res.status(statusCode).json({ message });
-  }
+  return res.status(410).json({message:'Open a programming activity to run code. Execution requires its assigned language, class permission and a verified dedicated sandbox.'});
 });
 
 router.post("/join/lookup", protect, async (req, res) => {
@@ -1957,7 +1983,7 @@ router.post("/join/lookup", protect, async (req, res) => {
     }
 
     const classResult = await pool.query(
-      `SELECT c.id, c.name, c.code, c.description, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
+      `SELECT c.id, c.name, c.code, c.description, c.grade_level, c.department_code, c.year_level, c.subject_id, c.semester, c.enrollment_open, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
               u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
        FROM classes c
        INNER JOIN users u ON u.id = c.teacher_id
@@ -1973,6 +1999,10 @@ router.post("/join/lookup", protect, async (req, res) => {
     }
 
     const classroom = classResult.rows[0];
+    const profile = (await pool.query('SELECT department_code,year_level FROM users WHERE id=$1', [req.user.id])).rows[0];
+    const curriculum = (await pool.query(`SELECT ${curriculumColumns} FROM classes c ${curriculumJoin} WHERE c.id=$1`, [classroom.id])).rows[0];
+    const eligibility = subjectEligibility(profile, { ...classroom, ...curriculum });
+    const eligibilityMessage = eligibility.message;
 
     const enrollment = await pool.query(
       `SELECT id, joined_at
@@ -1992,11 +2022,13 @@ router.post("/join/lookup", protect, async (req, res) => {
     );
 
     return res.status(200).json({
-      class: classroom,
+      class: { id: classroom.id, name: classroom.name, code: classroom.code, teacher_name: classroom.teacher_name, department_code: classroom.department_code, year_level: classroom.year_level, enrollment_open: classroom.enrollment_open, semester: classroom.semester, subject_id: curriculum.subject_id, subject_code: curriculum.subject_code, subject_name: curriculum.subject_name,curriculum_active:curriculum.curriculum_active===true },
+      eligible: eligibility.eligible, eligibilityMessage, eligibility,
       enrollment: enrollment.rows[0] ?? null,
       request: requestResult.rows[0] ?? null,
     });
   } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
     return res.status(500).json({
       message: "Failed to validate class code.",
       error: error.message,
@@ -2005,7 +2037,9 @@ router.post("/join/lookup", protect, async (req, res) => {
 });
 
 router.post("/join", protect, async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
     if (req.user.role !== "student") {
       return res
         .status(403)
@@ -2024,15 +2058,8 @@ router.post("/join", protect, async (req, res) => {
       return res.status(400).json({ message: "Class code is required." });
     }
 
-    const corUpload = normalizeCorUpload({
-      fileName: corFileName,
-      fileType: corFileType,
-      fileSize: corFileSize,
-      fileDataUrl: corDataUrl,
-    });
-
-    const classResult = await pool.query(
-      `SELECT c.id, c.name, c.code, c.description, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
+    const classResult = await client.query(
+      `SELECT c.id, c.name, c.code, c.description, c.grade_level, c.department_code, c.year_level, c.subject_id, c.semester, c.enrollment_open, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
               u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
        FROM classes c
        INNER JOIN users u ON u.id = c.teacher_id
@@ -2048,8 +2075,16 @@ router.post("/join", protect, async (req, res) => {
     }
 
     const classroom = classResult.rows[0];
+    const selectedAcademics = await prepareEnrollment(client, classroom.id, req.user.id, req.body);
 
-    const enrollment = await pool.query(
+    const corUpload = await validateCorUpload({
+      fileName: corFileName,
+      fileType: corFileType,
+      fileSize: corFileSize,
+      fileDataUrl: corDataUrl,
+    });
+
+    const enrollment = await client.query(
       `SELECT id FROM class_enrollments WHERE class_id = $1 AND student_id = $2`,
       [classroom.id, req.user.id],
     );
@@ -2060,7 +2095,7 @@ router.post("/join", protect, async (req, res) => {
       });
     }
 
-    const activeRequest = await pool.query(
+    const activeRequest = await client.query(
       `SELECT id, status, submitted_at
        FROM class_enrollment_requests
        WHERE class_id = $1 AND student_id = $2 AND status = 'pending'
@@ -2075,12 +2110,12 @@ router.post("/join", protect, async (req, res) => {
       });
     }
 
-    const request = await pool.query(
+    const request = await client.query(
       `INSERT INTO class_enrollment_requests (
          class_id, student_id, status, cor_file_name, cor_file_type,
-         cor_file_size, cor_data_url
+         cor_file_size, cor_data_url, declared_department, declared_year, declared_section, academic_request_id, requested_subject_id, requested_semester
        )
-       VALUES ($1, $2, 'pending', $3, $4, $5, $6)
+       VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10, (SELECT subject_id FROM classes WHERE id=$1), (SELECT semester FROM classes WHERE id=$1))
        RETURNING id, class_id, student_id, status, cor_file_name, cor_file_type,
                  cor_file_size, rejection_note, submitted_at, reviewed_at`,
       [
@@ -2090,17 +2125,22 @@ router.post("/join", protect, async (req, res) => {
         corUpload.fileType,
         corUpload.fileSize,
         corUpload.fileDataUrl,
+        selectedAcademics.departmentCode, selectedAcademics.yearLevel, selectedAcademics.section, selectedAcademics.academicId,
       ],
     );
 
+    await enrollmentNotification(client, classroom.teacher_id, 'teacher', classroom.id, request.rows[0].id, 'Student Enrollment Request', `${req.user.name} submitted a COR enrollment request for ${classroom.name}. Review it in Enrollment Requests.`);
+    const savedRequest = await enrollmentRecord(client, request.rows[0].id);
+    await client.query("COMMIT");
     return res.status(202).json({
       message: "Enrollment request submitted for teacher review.",
       class: classroom,
-      request: request.rows[0],
+      request: savedRequest,
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     if (error.statusCode) {
-      return res.status(error.statusCode).json({ message: error.message });
+      return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
     }
 
     if (error.code === "23505") {
@@ -2113,6 +2153,9 @@ router.post("/join", protect, async (req, res) => {
       message: "Failed to submit enrollment request.",
       error: error.message,
     });
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
   }
 });
 
@@ -2125,7 +2168,7 @@ router.get("/enrolled", protect, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT c.id, c.name, c.code, c.description, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
+      `SELECT c.id, c.name, c.code, c.description, c.grade_level, c.department_code, c.year_level, c.subject_id, c.semester, c.enrollment_open, c.teacher_id, c.student_count, c.assignment_count, c.created_at,
               ce.joined_at, u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
        FROM class_enrollments ce
        INNER JOIN classes c ON c.id = ce.class_id
@@ -2153,20 +2196,11 @@ router.get("/enrollment-requests/mine", protect, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT cer.id, cer.class_id, cer.student_id, cer.status,
-              cer.cor_file_name, cer.cor_file_type, cer.cor_file_size,
-              cer.rejection_note, cer.submitted_at, cer.reviewed_at,
-              c.name AS class_name, c.code AS class_code,
-              u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
-       FROM class_enrollment_requests cer
-       INNER JOIN classes c ON c.id = cer.class_id
-       INNER JOIN users u ON u.id = c.teacher_id
-       WHERE cer.student_id = $1
-       ORDER BY cer.submitted_at DESC`,
+      `SELECT ${enrollmentColumns} ${enrollmentJoins} WHERE cer.student_id = $1 ORDER BY (cer.status='pending') DESC,cer.submitted_at DESC`,
       [req.user.id],
     );
 
-    return res.status(200).json({ requests: result.rows });
+    return res.status(200).json({ requests: result.rows.map(projectEnrollment) });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to load enrollment requests.",
@@ -2184,24 +2218,11 @@ router.get("/enrollment-requests", protect, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT cer.id, cer.class_id, cer.student_id, cer.status,
-              cer.cor_file_name, cer.cor_file_type, cer.cor_file_size,
-              cer.cor_data_url, cer.rejection_note, cer.submitted_at,
-              cer.reviewed_at, cer.reviewed_by,
-              c.name AS class_name, c.code AS class_code,
-              s.name AS student_name, s.email AS student_email,
-              s.profile_image_url AS student_profile_image_url
-       FROM class_enrollment_requests cer
-       INNER JOIN classes c ON c.id = cer.class_id
-       INNER JOIN users s ON s.id = cer.student_id
-       WHERE c.teacher_id = $1
-       ORDER BY
-         CASE cer.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END,
-         cer.submitted_at DESC`,
+      `SELECT ${enrollmentColumns} ${enrollmentJoins} WHERE c.teacher_id = $1 ORDER BY (cer.status='pending') DESC,cer.submitted_at DESC`,
       [req.user.id],
     );
 
-    return res.status(200).json({ requests: result.rows });
+    return res.status(200).json({ requests: result.rows.map(projectEnrollment) });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to load enrollment requests.",
@@ -2241,8 +2262,8 @@ router.patch("/enrollment-requests/:requestId", protect, async (req, res) => {
     await client.query("BEGIN");
 
     const requestResult = await client.query(
-      `SELECT cer.id, cer.class_id, cer.student_id, cer.status,
-              c.teacher_id
+      `SELECT cer.id, cer.class_id, cer.student_id, cer.status, cer.declared_department, cer.declared_year, cer.declared_section, cer.cor_file_name, cer.cor_file_type, cer.cor_file_size, cer.cor_data_url,cer.requested_subject_id,cer.requested_semester,
+              c.teacher_id,c.subject_id,c.semester
        FROM class_enrollment_requests cer
        INNER JOIN classes c ON c.id = cer.class_id
        WHERE cer.id = $1
@@ -2264,6 +2285,22 @@ router.patch("/enrollment-requests/:requestId", protect, async (req, res) => {
       return res
         .status(409)
         .json({ message: "This enrollment request has already been reviewed." });
+    }
+
+    if (nextStatus === "accepted") {
+      if (enrollmentRequest.requested_semester !== enrollmentRequest.semester) throw Object.assign(new Error('The class semester changed after this request. Reject it so the student can submit a new eligible request.'), { statusCode: 409 });
+      if (!enrollmentRequest.requested_subject_id || enrollmentRequest.requested_subject_id !== enrollmentRequest.subject_id) {
+        throw Object.assign(new Error('The requested subject is missing or the class subject changed. Reject this request so the student can submit a new eligible request.'), { statusCode: 409 });
+      }
+      if (!enrollmentRequest.declared_department || !enrollmentRequest.declared_year) {
+        const error = Object.assign(new Error('This older request has no department/year confirmation. Reject it so the student can submit a new verified request.'), { statusCode: 409 });
+        throw error;
+      }
+      await verifyEnrollment(client, enrollmentRequest.class_id, enrollmentRequest.student_id, { departmentCode: enrollmentRequest.declared_department, yearLevel: Number(enrollmentRequest.declared_year) });
+      await validateCorUpload({ fileName: enrollmentRequest.cor_file_name, fileType: enrollmentRequest.cor_file_type, fileSize: enrollmentRequest.cor_file_size, fileDataUrl: enrollmentRequest.cor_data_url });
+      const official = (await client.query('SELECT section FROM users WHERE id=$1', [enrollmentRequest.student_id])).rows[0];
+      if (enrollmentRequest.declared_section && enrollmentRequest.declared_section !== official.section) throw Object.assign(new Error('Section confirmation is awaiting authorized academic verification.'), { statusCode: 403 });
+
     }
 
     const reviewed = await client.query(
@@ -2305,6 +2342,7 @@ router.patch("/enrollment-requests/:requestId", protect, async (req, res) => {
       }
     }
 
+    await enrollmentNotification(client, enrollmentRequest.student_id, 'student', enrollmentRequest.class_id, enrollmentRequest.id, nextStatus === 'accepted' ? 'Enrollment Approved' : 'Enrollment Rejected', nextStatus === 'accepted' ? 'Your enrollment was approved. Your class is now available.' : `Your request was rejected. ${rejectionNote || 'Contact your class teacher for details.'}`);
     await client.query("COMMIT");
 
     return res.status(200).json({
@@ -2317,6 +2355,7 @@ router.patch("/enrollment-requests/:requestId", protect, async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
+    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
     return res.status(500).json({
       message: "Failed to update enrollment request.",
       error: error.message,
@@ -2337,7 +2376,7 @@ router.get("/activities/:activityId", protect, async (req, res) => {
     const activityResult = await pool.query(
       `SELECT a.id, a.class_id, c.name AS class_name, c.code AS class_code,
               a.title, a.instructor, a.description, a.submission_type,
-              a.allow_resubmission, a.max_score, a.programming_language,
+              a.allow_resubmission, a.ai_scoring_enabled, a.rubric, a.max_score, a.programming_language,
               a.starter_code, a.attachment_name, a.attachment_type,
               a.attachment_size, a.due_date, a.created_at,
               u.name AS teacher_name, u.profile_image_url AS teacher_profile_image_url
@@ -2354,6 +2393,7 @@ router.get("/activities/:activityId", protect, async (req, res) => {
     }
 
     const activity = activityResult.rows[0];
+    if (req.user.role === "student") { activity.rubric = publicRubric(activity.rubric); delete activity.ai_scoring_enabled; }
     const classroom = await getAccessibleClass(activity.class_id, req.user);
 
     if (!classroom) {
@@ -2370,7 +2410,7 @@ router.get("/activities/:activityId", protect, async (req, res) => {
         `SELECT id, activity_id, student_id, content_text, file_name, file_type,
                 file_size, status, ai_probability, is_ai_generated,
                 analysis_details, submitted_version, teacher_comments,
-                teacher_remarks, teacher_grade, teacher_score, evaluated_at,
+                teacher_remarks, teacher_grade, teacher_score, grade_approved, evaluated_at,
                 submitted_at, updated_at
          FROM submissions
          WHERE activity_id = $1 AND student_id = $2
@@ -2435,6 +2475,43 @@ router.get(
         return res.status(400).json({ message: "Invalid document id." });
       }
 
+      if (documentType === "academic-cor") {
+        const cor = (await pool.query(`SELECT r.*,u.name AS student_name FROM academic_verification_requests r JOIN users u ON u.id=r.student_id WHERE r.id=$1`, [documentId])).rows[0];
+        if (!cor || !cor.cor_data_url) return res.status(404).json({ message: 'Academic COR document not found.' });
+        const owner = req.user.role === 'student' && Number(req.user.id) === Number(cor.student_id);
+        const reviewer = req.user.role === 'teacher' && (await pool.query('SELECT 1 FROM users WHERE id=$1 AND can_verify_academics=TRUE', [req.user.id])).rows.length > 0;
+        const classTeacher = req.user.role === 'teacher' && (await pool.query('SELECT 1 FROM academic_enrollment_intents i JOIN classes c ON c.id=i.class_id WHERE i.academic_request_id=$1 AND c.teacher_id=$2',[cor.id,req.user.id])).rows.length>0;
+        if (!owner && !reviewer && !classTeacher) return res.status(403).json({ message: 'You do not have access to this document.' });
+        res.set('Cache-Control', 'no-store');
+        return res.json({ document: { id: String(cor.id), kind: 'academic-cor', title: 'Academic Profile COR', fileName: cor.cor_file_name, fileType: cor.cor_file_type, fileSize: cor.cor_file_size, dataUrl: cor.cor_data_url, status: cor.status, createdAt: cor.created_at, ownerName: cor.student_name } });
+      }
+
+      if (documentType === "cor") {
+        const result = await pool.query(
+          `SELECT cer.id, cer.class_id, cer.student_id, cer.cor_file_name,
+                  cer.cor_file_type, cer.cor_file_size, cer.cor_data_url,
+                  cer.status, cer.academic_request_id, cer.submitted_at, c.name AS class_name, u.name AS student_name
+           FROM class_enrollment_requests cer
+           INNER JOIN classes c ON c.id = cer.class_id
+           INNER JOIN users u ON u.id = cer.student_id
+           WHERE cer.id = $1 LIMIT 1`,
+          [documentId],
+        );
+        const cor = result.rows[0];
+        if (!cor) return res.status(404).json({ message: "COR document not found." });
+        const teacherCanView = req.user.role === "teacher" && await getAccessibleClass(cor.class_id, req.user);
+        const studentCanView = req.user.role === "student" && Number(cor.student_id) === Number(req.user.id);
+        const academicCanView = req.user.role === 'teacher' && cor.academic_request_id && (await pool.query('SELECT 1 FROM users WHERE id=$1 AND can_verify_academics=TRUE', [req.user.id])).rows.length > 0;
+        if (!teacherCanView && !studentCanView && !academicCanView) return res.status(403).json({ message: "You do not have access to this document." });
+        return res.status(200).json({ document: {
+          id: String(cor.id), kind: "cor", title: "Certificate of Registration",
+          className: cor.class_name, fileName: cor.cor_file_name, fileType: cor.cor_file_type,
+          fileSize: cor.cor_file_size, dataUrl: cor.cor_data_url, textContent: null,
+          status: cor.status, createdAt: cor.submitted_at, submittedAt: cor.submitted_at,
+          ownerName: cor.student_name,
+        } });
+      }
+
       if (documentType === "activity-attachment") {
         const activityResult = await pool.query(
           `SELECT a.id, a.class_id, c.name AS class_name, a.title AS activity_title,
@@ -2491,7 +2568,8 @@ router.get(
           `SELECT s.id, s.activity_id, a.class_id, c.name AS class_name,
                 a.title AS activity_title, s.student_id, u.name AS student_name,
                 s.content_text, s.file_name, s.file_type, s.file_size,
-                s.file_data_url, s.status, s.submitted_at, s.updated_at
+                s.file_data_url, s.status, s.submitted_at, s.updated_at,
+                a.submission_type, a.programming_language
          FROM submissions s
          INNER JOIN activities a ON a.id = s.activity_id
          INNER JOIN classes c ON c.id = a.class_id
@@ -2533,6 +2611,8 @@ router.get(
             fileSize: submission.file_size,
             dataUrl: submission.file_data_url,
             textContent: submission.content_text,
+            code: submission.submission_type === "code",
+            language: submission.programming_language ?? null,
             status: submission.status,
             createdAt: submission.updated_at,
             submittedAt: submission.submitted_at,
@@ -2570,14 +2650,14 @@ router.get("/:classId/activities", protect, async (req, res) => {
     if (req.user.role === "student") {
       const result = await pool.query(
         `SELECT a.id, a.class_id, a.title, a.instructor, a.description, a.submission_type,
-                a.allow_resubmission, a.max_score, a.programming_language,
+                a.allow_resubmission, a.ai_scoring_enabled, a.rubric, a.max_score, a.programming_language,
                 a.starter_code, a.attachment_name, a.attachment_type,
                 a.attachment_size, a.due_date, a.created_at,
                 s.id AS submission_id,
                 CASE WHEN s.status = 'analyzed' THEN 'Analyzed' ELSE 'Pending' END AS submission_status,
                 s.ai_probability, s.is_ai_generated, s.analysis_details,
                 s.teacher_comments, s.teacher_remarks, s.teacher_grade,
-                s.teacher_score, s.evaluated_at, s.submitted_at, s.updated_at,
+                s.teacher_score, s.grade_approved, s.evaluated_at, s.submitted_at, s.updated_at,
                 s.content_text, s.file_name, s.file_type, s.file_size,
                 s.submitted_version
          FROM activities a
@@ -2587,12 +2667,18 @@ router.get("/:classId/activities", protect, async (req, res) => {
         [classId, req.user.id],
       );
 
-      return res.status(200).json({ activities: result.rows });
+      return res.status(200).json({ activities: result.rows.map(raw => {
+        const row = authoritativeSubmission(raw);
+        const { ai_scoring_enabled, ...activity } = row;
+        activity.rubric = publicRubric(activity.rubric);
+        if (row.grade_approved === false) Object.assign(activity, { teacher_score: null, teacher_grade: null, teacher_comments: null, teacher_remarks: null, evaluated_at: null });
+        return activity;
+      }) });
     }
 
     const result = await pool.query(
       `SELECT a.id, a.class_id, a.title, a.instructor, a.description, a.submission_type,
-              a.allow_resubmission, a.max_score, a.programming_language,
+              a.allow_resubmission, a.ai_scoring_enabled, a.rubric, a.max_score, a.programming_language,
               a.starter_code, a.attachment_name, a.attachment_type, a.attachment_size,
               a.due_date, a.created_at,
               COALESCE((SELECT COUNT(*) FROM submissions s WHERE s.activity_id = a.id), 0)::int AS submission_count
@@ -2665,7 +2751,9 @@ router.post("/:classId/activities", protect, async (req, res) => {
         .json({ message: "Submission type must be essay, file, image, or code." });
     }
 
-    const normalizedMaxScore = normalizeAcademicScore(maxScore ?? 100, 10000);
+    const criteria = rubric(req.body.rubric ?? []);
+    const aiScoringEnabled = scoringEnabled(req.body.aiScoringEnabled, criteria);
+    const normalizedMaxScore = criteria.length ? round(criteria.reduce((total, c) => total + c.maxPoints, 0)) : normalizeAcademicScore(maxScore ?? 100, 10000);
 
     if (!normalizedMaxScore || normalizedMaxScore <= 0) {
       return res
@@ -2675,8 +2763,13 @@ router.post("/:classId/activities", protect, async (req, res) => {
 
     const normalizedLanguage =
       normalizedSubmissionType === "code"
-        ? asTrimmedString(programmingLanguage) || "Plain text"
+        ? normalizeExecutionLanguage(programmingLanguage || 'javascript')
         : null;
+    if(normalizedSubmissionType==='code'&&!normalizedLanguage)return res.status(400).json({message:'Choose Java, JavaScript, Python or Dart for a new programming activity.'});
+    const storedLanguage=normalizedLanguage?({java:'Java',javascript:'JavaScript',python:'Python',dart:'Dart'}[normalizedLanguage]):null;
+    const programmingOptions=normalizedSubmissionType==='code'?codeSettings(req.body.codeSettings):null;
+    if(programmingOptions?.autoEvaluate&&!(await executionAvailability(normalizedLanguage!)).enabled)return res.status(409).json({message:'Verify a dedicated execution sandbox before enabling automatic code evaluation.'});
+    if(programmingOptions?.technicalPoints!=null&&programmingOptions.technicalPoints>normalizedMaxScore)return res.status(400).json({message:'Technical assessment points cannot exceed the activity maximum.'});
     const normalizedStarterCode =
       normalizedSubmissionType === "code"
         ? asTrimmedString(starterCode) || null
@@ -2693,17 +2786,18 @@ router.post("/:classId/activities", protect, async (req, res) => {
       typeof allowResubmission === "boolean" ? allowResubmission : true;
 
     const insert = await pool.query(
-      `INSERT INTO activities (
+      `WITH created AS (INSERT INTO activities (
          class_id, title, instructor, description, submission_type,
          allow_resubmission, max_score, programming_language, starter_code,
          attachment_name, attachment_type, attachment_size, attachment_data_url,
-         due_date
+         due_date, rubric, ai_scoring_enabled
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id, class_id, title, instructor, description, submission_type,
                  allow_resubmission, max_score, programming_language, starter_code,
                  attachment_name, attachment_type, attachment_size, due_date,
-                 created_at`,
+                 created_at, rubric, ai_scoring_enabled),configured AS (INSERT INTO activity_code_settings(activity_id,settings)
+                 SELECT id,$17::jsonb FROM created WHERE submission_type='code') SELECT * FROM created`,
       [
         classId,
         title,
@@ -2712,13 +2806,16 @@ router.post("/:classId/activities", protect, async (req, res) => {
         normalizedSubmissionType,
         canResubmit,
         normalizedMaxScore,
-        normalizedLanguage,
+        storedLanguage,
         normalizedStarterCode,
         attachment.fileName,
         attachment.fileType,
         attachment.fileSize,
         attachment.fileDataUrl,
         dueDate,
+        JSON.stringify(criteria),
+        aiScoringEnabled,
+        JSON.stringify(programmingOptions),
       ],
     );
 
@@ -2735,7 +2832,7 @@ router.post("/:classId/activities", protect, async (req, res) => {
     });
   } catch (error) {
     if (error.statusCode) {
-      return res.status(error.statusCode).json({ message: error.message });
+      return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
     }
 
     return res.status(500).json({
@@ -2749,7 +2846,20 @@ router.post(
   "/activities/:activityId/submissions",
   protect,
   async (req, res) => {
+    let preparedCode:Awaited<ReturnType<typeof checkCodeSubmission>>|null=null;
+    // Native validation/provider jobs must not hold an activity row lock or a DB
+    // connection while other students are saving. Recheck the snapshot at commit.
+    try{
+      const id=Number(req.params.activityId),source=req.body.contentText;
+      if(req.user.role==='student'&&Number.isSafeInteger(id)&&id>0&&typeof source==='string'&&source.trim()&&!hasUploadPayload(req.body)&&!req.body.extractedText){
+        const candidate=(await pool.query('SELECT submission_type,programming_language FROM activities WHERE id=$1',[id])).rows[0];
+        if(candidate?.submission_type==='code'&&normalizeExecutionLanguage(candidate.programming_language))preparedCode=await checkCodeSubmission(pool,id,req.user,source,req.body);
+      }
+    }catch(error){return res.status(error.statusCode??500).json({message:error.statusCode?error.message:'Unable to validate this code submission. Your source is preserved.'});}
+    const client = await pool.connect();
     try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('truesight.actor_id', $1, true)", [String(req.user.id)]);
       if (req.user.role !== "student") {
         return res
           .status(403)
@@ -2762,10 +2872,10 @@ router.post(
         return res.status(400).json({ message: "Invalid activity id." });
       }
 
-      const activityResult = await pool.query(
-        `SELECT a.id, a.class_id, a.submission_type, a.allow_resubmission
+      const activityResult = await client.query(
+        `SELECT a.id, a.class_id, a.submission_type, a.allow_resubmission,a.programming_language
        FROM activities a
-       WHERE a.id = $1`,
+       WHERE a.id = $1 FOR UPDATE`,
         [activityId],
       );
 
@@ -2775,7 +2885,7 @@ router.post(
 
       const activity = activityResult.rows[0];
 
-      const enrollment = await pool.query(
+      const enrollment = await client.query(
         `SELECT id FROM class_enrollments WHERE class_id = $1 AND student_id = $2`,
         [activity.class_id, req.user.id],
       );
@@ -2896,7 +3006,7 @@ router.post(
         });
       }
 
-      const existingSubmission = await pool.query(
+      const existingSubmission = await client.query(
         `SELECT id, submitted_version
        FROM submissions
        WHERE activity_id = $1 AND student_id = $2
@@ -2918,7 +3028,14 @@ router.post(
           ? Number(existingSubmission.rows[0].submitted_version ?? 1) + 1
           : 1;
 
-      const submission = await pool.query(
+      let codeEvaluation:typeof preparedCode=null;
+      if(activity.submission_type==='code'&&normalizeExecutionLanguage(activity.programming_language)){
+        const current=await codeActivity(client,activityId,req.user);
+        if(!preparedCode||codeConfigurationKey(preparedCode.context)!==codeConfigurationKey(current))throw new CodeExecutionError('The programming activity settings changed during validation. Review the current requirements and submit again.',409);
+        codeEvaluation={context:current,result:preparedCode.result};
+      }
+
+      const submission = await client.query(
         `INSERT INTO submissions (
          activity_id, student_id, content_text, file_name, file_type,
           file_size, file_data_url, submitted_version
@@ -2937,6 +3054,8 @@ router.post(
           analysis_details = NULL,
           teacher_comments = NULL,
           teacher_remarks = NULL,
+          ai_assessment = NULL, grade_approved = FALSE,
+          rubric_scores = '{}', computed_score = NULL, score_overridden = FALSE, adjustment_note = NULL,
           teacher_grade = NULL,
           teacher_score = NULL,
           evaluated_by = NULL,
@@ -2963,7 +3082,11 @@ router.post(
         ],
       );
 
-      await pool.query(
+      if(codeEvaluation){
+        await recordCodeRun(client,codeEvaluation.context,Number(req.user.id),submittedTextContent,'submission',codeEvaluation.result??{status:'Not evaluated',message:'Automatic test evaluation is not enabled for this activity.'},submission.rows[0].id,nextVersion);
+        await client.query('DELETE FROM code_drafts WHERE activity_id=$1 AND student_id=$2 AND source_text=$3',[activityId,req.user.id,submittedTextContent]);
+      }
+      await client.query(
         `INSERT INTO submission_history (
          submission_id, activity_id, student_id, version, content_text,
          file_name, file_type, file_size, status
@@ -2984,6 +3107,7 @@ router.post(
         ],
       );
 
+      await client.query("COMMIT");
       await createSubmissionNotification(submission.rows[0].id);
 
       return res.status(200).json({
@@ -2991,14 +3115,18 @@ router.post(
         submission: sanitizeStudentSubmission(submission.rows[0]),
       });
     } catch (error) {
+      await client.query("ROLLBACK");
       if (error.statusCode) {
-        return res.status(error.statusCode).json({ message: error.message });
+        return res.status(error.statusCode).json({ message: error.message, ...(error.eligibility ? { eligibility: error.eligibility } : {}) });
       }
 
       return res.status(500).json({
         message: "Failed to submit activity.",
         error: error.message,
       });
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
     }
   },
 );
@@ -3145,13 +3273,13 @@ router.get("/:classId/submissions", protect, async (req, res) => {
 
     const submissions = await pool.query(
       `SELECT s.id, s.activity_id, a.class_id, a.title AS activity_title,
-              a.submission_type, a.max_score, a.programming_language,
+              a.submission_type, a.ai_scoring_enabled, a.rubric, a.max_score, a.programming_language,
               a.starter_code, a.due_date,
               s.student_id, u.name AS student_name, u.email AS student_email,
               s.content_text, s.file_name, s.file_type, s.file_size, s.file_data_url,
               s.status, s.ai_probability, s.is_ai_generated, s.analysis_details,
               s.submitted_version, s.teacher_comments, s.teacher_remarks,
-              s.teacher_grade, s.teacher_score, s.evaluated_at,
+              s.teacher_grade, s.teacher_score, s.ai_assessment, s.grade_approved, s.rubric_scores, s.computed_score, s.score_overridden, s.adjustment_note, s.evaluated_at,
               s.submitted_at, s.updated_at
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
@@ -3161,7 +3289,7 @@ router.get("/:classId/submissions", protect, async (req, res) => {
       [classId],
     );
 
-    return res.status(200).json({ submissions: submissions.rows });
+    return res.status(200).json({ submissions: submissions.rows.map(authoritativeSubmission) });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to load submissions.",
@@ -3186,13 +3314,13 @@ router.get("/submissions/:submissionId", protect, async (req, res) => {
 
     const submission = await pool.query(
       `SELECT s.id, s.activity_id, a.class_id, c.name AS class_name,
-              a.title AS activity_title, a.submission_type, a.max_score,
+              a.title AS activity_title, a.submission_type, a.ai_scoring_enabled, a.rubric, a.max_score,
               a.programming_language, a.starter_code, a.due_date,
               s.student_id, u.name AS student_name, u.email AS student_email,
               s.content_text, s.file_name, s.file_type, s.file_size, s.file_data_url,
               s.status, s.ai_probability, s.is_ai_generated, s.analysis_details,
               s.submitted_version, s.teacher_comments, s.teacher_remarks,
-              s.teacher_grade, s.teacher_score, s.evaluated_at,
+              s.teacher_grade, s.teacher_score, s.ai_assessment, s.grade_approved, s.rubric_scores, s.computed_score, s.score_overridden, s.adjustment_note, s.evaluated_at,
               s.submitted_at, s.updated_at
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
@@ -3209,7 +3337,7 @@ router.get("/submissions/:submissionId", protect, async (req, res) => {
       });
     }
 
-    return res.status(200).json({ submission: submission.rows[0] });
+    return res.status(200).json({ submission: authoritativeSubmission(submission.rows[0]) });
   } catch (error) {
     return res.status(500).json({
       message: "Failed to load submission.",
@@ -3218,80 +3346,7 @@ router.get("/submissions/:submissionId", protect, async (req, res) => {
   }
 });
 
-router.patch("/submissions/:submissionId/evaluation", protect, async (req, res) => {
-  try {
-    if (req.user.role !== "teacher") {
-      return res
-        .status(403)
-        .json({ message: "Only teachers can evaluate submissions." });
-    }
-
-    const submissionId = Number(req.params.submissionId);
-
-    if (!Number.isFinite(submissionId)) {
-      return res.status(400).json({ message: "Invalid submission id." });
-    }
-
-    const submissionResult = await pool.query(
-      `SELECT s.id, a.max_score
-       FROM submissions s
-       INNER JOIN activities a ON a.id = s.activity_id
-       INNER JOIN classes c ON c.id = a.class_id
-       WHERE s.id = $1 AND c.teacher_id = $2
-       LIMIT 1`,
-      [submissionId, req.user.id],
-    );
-
-    if (submissionResult.rows.length === 0) {
-      return res.status(404).json({
-        message: "Submission not found or not accessible in your classes.",
-      });
-    }
-
-    const maxScore = Number(submissionResult.rows[0].max_score ?? 100);
-    const teacherComments = asTrimmedString(req.body.comments) || null;
-    const teacherRemarks = asTrimmedString(req.body.remarks) || null;
-    const teacherGrade = asTrimmedString(req.body.grade) || null;
-    const teacherScore = normalizeAcademicScore(req.body.score, maxScore);
-
-    const updated = await pool.query(
-      `UPDATE submissions
-       SET teacher_comments = $2,
-           teacher_remarks = $3,
-           teacher_grade = $4,
-           teacher_score = $5,
-           evaluated_by = $6,
-           evaluated_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, status, ai_probability, is_ai_generated, analysis_details,
-                 teacher_comments, teacher_remarks, teacher_grade,
-                 teacher_score, evaluated_at, updated_at`,
-      [
-        submissionId,
-        teacherComments,
-        teacherRemarks,
-        teacherGrade,
-        teacherScore,
-        req.user.id,
-      ],
-    );
-
-    return res.status(200).json({
-      message: "Evaluation saved successfully.",
-      submission: updated.rows[0],
-    });
-  } catch (error) {
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({ message: error.message });
-    }
-
-    return res.status(500).json({
-      message: "Failed to save evaluation.",
-      error: error.message,
-    });
-  }
-});
+router.patch("/submissions/:submissionId/evaluation", protect, saveEvaluation);
 
 router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
   try {
@@ -3308,7 +3363,7 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
     }
 
     const submissionResult = await pool.query(
-      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, a.submission_type
+      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, s.submitted_version, a.rubric, a.ai_scoring_enabled, a.submission_type
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
        INNER JOIN classes c ON c.id = a.class_id
@@ -3324,7 +3379,10 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
     }
 
     const submission = submissionResult.rows[0];
+    const requestId = randomUUID();
+    await pool.query('UPDATE submissions SET analysis_request_id=$2 WHERE id=$1 AND submitted_version=$3', [submission.id, requestId, submission.submitted_version]);
     const analysis = await analyzeSubmissionContent(submission);
+    const assessment = await assessSubmission(submission, analysis.details);
 
     const updated = await pool.query(
       `UPDATE submissions
@@ -3332,23 +3390,26 @@ router.post("/submissions/:submissionId/analyze", protect, async (req, res) => {
            ai_probability = $2,
            is_ai_generated = $3,
            analysis_details = $4::jsonb,
+           ai_assessment = $5::jsonb,
            updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, status, ai_probability, is_ai_generated, analysis_details, updated_at`,
+       WHERE id = $1 AND analysis_request_id=$9 AND submitted_version=$6 AND EXISTS (SELECT 1 FROM activities a WHERE a.id=submissions.activity_id AND a.rubric=$7::jsonb AND a.ai_scoring_enabled=$8)
+       RETURNING id, status, ai_probability, is_ai_generated, analysis_details, ai_assessment, updated_at`,
       [
         submission.id,
         analysis.aiProbability,
         analysis.isAIGenerated,
         JSON.stringify({
-          ...analysis.details,
+          ...analysis.details, submissionId: submission.id, submittedVersion: submission.submitted_version,
           fileName: submission.file_name ?? null,
         }),
+        JSON.stringify(assessment), submission.submitted_version, JSON.stringify(submission.rubric), submission.ai_scoring_enabled, requestId,
       ],
     );
 
+    if (!updated.rows.length) return res.status(409).json({ message: 'The submission or rubric changed during analysis. Reload and analyze the current version.' });
     return res.status(200).json({
       message: analysis.details.analysisStatus === "failed" ? "AI detection temporarily unavailable." : "Submission analyzed successfully.",
-      submission: updated.rows[0],
+      submission: authoritativeSubmission(updated.rows[0]),
     });
   } catch (error) {
     return res.status(500).json({
@@ -3382,7 +3443,7 @@ router.post("/:classId/submissions/analyze", protect, async (req, res) => {
     }
 
     const submissionRows = await pool.query(
-      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, s.status, a.submission_type
+      `SELECT s.id, s.content_text, s.file_name, s.file_type, s.file_data_url, s.status, s.submitted_version, a.rubric, a.ai_scoring_enabled, a.submission_type
        FROM submissions s
        INNER JOIN activities a ON a.id = s.activity_id
        WHERE a.class_id = $1
@@ -3403,29 +3464,34 @@ router.post("/:classId/submissions/analyze", protect, async (req, res) => {
     let failed = 0;
 
     for (const submission of submissionRows.rows) {
+      const requestId = randomUUID();
+      await pool.query('UPDATE submissions SET analysis_request_id=$2 WHERE id=$1 AND submitted_version=$3', [submission.id, requestId, submission.submitted_version]);
       const analysis = await analyzeSubmissionContent(submission);
+      const assessment = await assessSubmission(submission, analysis.details);
 
-      await pool.query(
+      const savedAnalysis = await pool.query(
         `UPDATE submissions
          SET status = CASE WHEN $4::jsonb->>'analysisStatus' = 'failed' THEN 'pending' ELSE 'analyzed' END,
              ai_probability = $2,
              is_ai_generated = $3,
              analysis_details = $4::jsonb,
+             ai_assessment = $5::jsonb,
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1 AND analysis_request_id=$9 AND submitted_version=$6 AND EXISTS (SELECT 1 FROM activities a WHERE a.id=submissions.activity_id AND a.rubric=$7::jsonb AND a.ai_scoring_enabled=$8)`,
         [
           submission.id,
           analysis.aiProbability,
           analysis.isAIGenerated,
           JSON.stringify({
-            ...analysis.details,
+            ...analysis.details, submissionId: submission.id, submittedVersion: submission.submitted_version,
             fileName: submission.file_name ?? null,
             fileType: submission.file_type ?? null,
           }),
+          JSON.stringify(assessment), submission.submitted_version, JSON.stringify(submission.rubric), submission.ai_scoring_enabled, requestId,
         ],
       );
 
-      if (analysis.details.analysisStatus === "failed") failed += 1;
+      if (analysis.details.analysisStatus === "failed" || !savedAnalysis.rowCount) failed += 1;
       else updated += 1;
     }
 

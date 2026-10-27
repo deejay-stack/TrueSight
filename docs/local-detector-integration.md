@@ -31,6 +31,8 @@ than the former 40–60% review band. No trained artifacts are changed.
 
 ## Results and failure handling
 
+See [the current correction report](analysis-college-corrections.md) for the authoritative result contract, sample evaluation, and uncertainty labels. Raw `HUMAN` decisions below the high text threshold are no longer described as proof of human-created writing.
+
 Python returns 0–1 probabilities and the detector's label. The Express adapter
 preserves the existing 0–100 `aiProbability`, `humanProbability`, and confidence
 fields. It stores the original probabilities in `analysis_details.probabilities`

@@ -2,11 +2,20 @@
 import json
 import math
 import sys
+import hashlib
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODELS = PROJECT_ROOT / "models"
 MODEL_NAMES = {"text": "DeBERTa-v3-base V3", "code": "CodeT5-BiLSTM", "image": "EfficientNetV2L"}
+
+
+def artifact_version(artifact, name):
+    digest = hashlib.sha256()
+    with artifact.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return name + ":sha256:" + digest.hexdigest()
 
 
 def normalize_result(detector_type, ai_probability, threshold, human_probability=None):
@@ -43,10 +52,15 @@ class TextDetector:
         if config["max_length"] != 512 or config["labels"] != {"0": "HUMAN", "1": "AI"}:
             raise ValueError("Unexpected text model metadata")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-base")
+        self.tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-base", local_files_only=True)
+        self.tokenizer_fingerprint = hashlib.sha256(self.tokenizer.backend_tokenizer.to_str().encode("utf-8")).hexdigest()
         self.model = AutoModelForSequenceClassification.from_pretrained(directory, local_files_only=True)
         if self.model.config.num_labels != 2:
             raise ValueError("Text model must have two output logits")
+        if self.model.config.id2label != {0: "HUMAN", 1: "AI"} or self.model.config.label2id != {"HUMAN": 0, "AI": 1}:
+            raise ValueError("Checkpoint class mapping disagrees with production metadata")
+        artifact = next(iter(directory.glob("*.safetensors")), None)
+        self.model_version = artifact_version(artifact, "V3-epoch1-step3750") if artifact else "V3-epoch1-step3750:metadata-verified"
         self.model.to(self.device).eval()
 
     def predict(self, text):
@@ -56,14 +70,24 @@ class TextDetector:
         offsets = inputs.pop("offset_mapping")[0].tolist()
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
         with self.torch.inference_mode():
-            probabilities = self.torch.softmax(self.model(**inputs).logits, dim=-1)[0]
+            logits = self.model(**inputs).logits
+            probabilities = self.torch.softmax(logits, dim=-1)[0]
         result = normalize_result("text", float(probabilities[1].item()), self.threshold, float(probabilities[0].item()))
+        result["modelVersion"] = self.model_version
+        result["tokenizerFingerprint"] = self.tokenizer_fingerprint
+        result["rawOutput"] = logits[0].cpu().tolist()
         try:
             from text_explanations import explain_text
             result["textExplanation"] = explain_text(self, text, inputs, offsets, result["aiProbability"])
         except Exception as error:
             print(f"[ai-explanation] Sentence analysis unavailable: {error}", file=sys.stderr, flush=True)
             result["textExplanation"] = {"status": "unavailable", "message": "Sentence explanation could not be completed. The document score is still valid; run analysis again to retry."}
+        try:
+            from segment_explanations import explain_segments
+            result["segmentExplanation"] = explain_segments(self, text)
+        except Exception as error:
+            print(f"[ai-explanation] Segment scores unavailable: {error}", file=sys.stderr, flush=True)
+            result["segmentExplanation"] = {"status": "unavailable", "message": "Content-level scores could not be completed. The document result is still valid."}
         return result
 
 
@@ -102,12 +126,13 @@ class CodeDetector:
             raise ValueError("Unexpected code label mapping")
         self.threshold = checkpoint["threshold"]
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = RobertaTokenizer.from_pretrained(checkpoint["tokenizer_name"])
+        self.tokenizer = RobertaTokenizer.from_pretrained(checkpoint["tokenizer_name"], local_files_only=True)
         if len(self.tokenizer) != checkpoint["vocab_size"] or self.tokenizer.pad_token_id != checkpoint["padding_idx"]:
             raise ValueError("Code tokenizer does not match checkpoint")
         self.model = build_code_model(torch, checkpoint)
         self.model.load_state_dict(checkpoint["model_state_dict"], strict=True)
         self.model.to(self.device).eval()
+        self.model_version = artifact_version(MODELS / "code_detector" / "truesight_code_detector.pt", MODEL_NAMES["code"])
 
     def predict(self, text):
         if not isinstance(text, str) or not text.strip():
@@ -116,4 +141,7 @@ class CodeDetector:
         with self.torch.inference_mode():
             logit = self.model(inputs["input_ids"].to(self.device), inputs["attention_mask"].to(self.device))
             probability = float(self.torch.sigmoid(logit).item())
-        return normalize_result("code", probability, self.threshold)
+        result = normalize_result("code", probability, self.threshold)
+        result["modelVersion"] = self.model_version
+        result["rawOutput"] = [float(logit.item())]
+        return result

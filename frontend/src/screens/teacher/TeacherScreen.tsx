@@ -1,8 +1,17 @@
-﻿import { useEffect, useState, type FormEvent } from "react";
+import { AcademicSelectors, type AcademicSelection } from "../../components/AcademicSelectors";
+import { AcademicReviewPanel } from "./components/AcademicReviewPanel";
+import { TeacherSubjectsPage } from "./TeacherSubjectsPage";
+import { fetchAcademicEnrollmentIntents,reviewAcademicCor,type AcademicEnrollmentIntent } from '../../services/academicEnrollmentService';
+import { notificationTarget } from '../../utils/notificationTarget';
+import { CurriculumSubjectSelect } from "../../components/CurriculumSubjectSelect";
+import type { RubricCriterion } from "../../services/lmsService";
+import type {CodeSettings} from '../../services/codeWorkspaceService';
+import { useEffect, useState, type FormEvent } from "react";
 import { useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation,useNavigate, useParams,useSearchParams } from "react-router-dom";
 import {
   BookOpen,
+  Library,
   CalendarClock,
   ClipboardList,
   FileText,
@@ -15,7 +24,6 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
 import { GlobalThemeToggle } from "../../components/theme/GlobalThemeToggle";
 import { AppLogo } from "../../components/AppLogo";
 import { DashboardSkeleton } from "../../components/DashboardSkeleton";
@@ -57,7 +65,7 @@ import {
   type TeacherOverviewActivity,
   type TeacherOverviewStudent,
 } from "./services/teacherClassroomService";
-import { generateUniqueClassCode } from "../../utils/ClassCode";
+import { SemesterSelect } from "../../components/SemesterSelect";
 import {
   TeacherSidebar,
   type TeacherSection,
@@ -87,6 +95,9 @@ import {
 type Section = TeacherSection;
 
 type ActivityFormState = {
+  codeSettings?:CodeSettings;
+  aiScoringEnabled?: boolean;
+  rubric?: RubricCriterion[];
   title: string;
   instructor: string;
   description: string;
@@ -105,8 +116,9 @@ type ActivityFormState = {
 const SIDEBAR_ITEMS = [
   { key: "home", label: "Home", icon: Home },
   { key: "classes", label: "Classes", icon: BookOpen },
+  { key: "subjects", label: "Subjects", icon: Library },
   { key: "students", label: "Students", icon: Users },
-  { key: "uploads", label: "Uploads", icon: Upload },
+  { key: "uploads", label: "Enrollment Requests", icon: Upload },
   { key: "activities", label: "Activities", icon: ClipboardList },
   { key: "submissions", label: "Submissions", icon: FileText },
   { key: "upcoming", label: "Upcoming", icon: CalendarClock },
@@ -119,6 +131,7 @@ const LEGACY_SECTION_REDIRECTS: Record<string, Section> = {
 const VALID_SECTIONS: Section[] = [
   "home",
   "classes",
+  "subjects",
   "students",
   "uploads",
   "activities",
@@ -131,8 +144,9 @@ const VALID_SECTIONS: Section[] = [
 const SECTION_LABELS: Record<Section, string> = {
   home: "Home",
   classes: "Classes",
+  subjects: "Subjects",
   students: "Students",
-  uploads: "Uploads",
+  uploads: "Enrollment Requests",
   activities: "Activities",
   submissions: "Submissions",
   upcoming: "Upcoming",
@@ -163,6 +177,8 @@ const resolveSection = (value?: string): Section => {
 
 export default function TeacherScreen() {
   const navigate = useNavigate();
+  const location=useLocation();
+  const [searchParams]=useSearchParams();
   const { section, activityId } = useParams<{
     section?: string;
     activityId?: string;
@@ -204,6 +220,9 @@ export default function TeacherScreen() {
   const [enrollmentRequests, setEnrollmentRequests] = useState<
     EnrollmentRequest[]
   >([]);
+  const [academicIntents,setAcademicIntents] = useState<AcademicEnrollmentIntent[]>([]);
+  const [reviewingAcademicId,setReviewingAcademicId]=useState<number|null>(null);
+  const enrollmentLoadGeneration = useRef(0);
   const [isLoadingEnrollmentRequests, setIsLoadingEnrollmentRequests] =
     useState(true);
   const [reviewingEnrollmentRequestId, setReviewingEnrollmentRequestId] =
@@ -211,8 +230,9 @@ export default function TeacherScreen() {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
-  const [className, setClassName] = useState("");
-  const [courseCode, setCourseCode] = useState("");
+  const [classAcademics, setClassAcademics] = useState<AcademicSelection>({ departmentCode: "", yearLevel: 0 });
+  const [classSubjectId, setClassSubjectId] = useState('');
+  const [classSemester, setClassSemester] = useState(1);
   const [description, setDescription] = useState("");
   const [latestCreatedCode, setLatestCreatedCode] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -282,6 +302,7 @@ export default function TeacherScreen() {
     try {
       const overview = await fetchTeacherOverview();
       setClasses(overview.classes);
+      setManagedClass(current => current ? overview.classes.find(c => c.id === current.id) ?? current : null);
       setOverviewStudents(overview.students);
       setOverviewActivities(overview.activities);
       setUpcomingActivities(overview.upcoming);
@@ -337,20 +358,24 @@ export default function TeacherScreen() {
   };
 
   const loadEnrollmentRequests = async () => {
+    const generation=++enrollmentLoadGeneration.current;
     setIsLoadingEnrollmentRequests(true);
 
     try {
-      const payload = await fetchTeacherEnrollmentRequests();
-      setEnrollmentRequests(payload);
+      const [requests,intents] = await Promise.allSettled([fetchTeacherEnrollmentRequests(),fetchAcademicEnrollmentIntents()]);
+      if(generation!==enrollmentLoadGeneration.current)return;
+      if(requests.status==='fulfilled')setEnrollmentRequests(requests.value);
+      else toast.error(requests.reason instanceof Error?requests.reason.message:'Unable to load class approval requests.');
+      if(intents.status==='fulfilled')setAcademicIntents(intents.value);
+      else toast.error(intents.reason instanceof Error?intents.reason.message:'Unable to load academic verification submissions.');
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Failed to load enrollment requests.";
       toast.error(message);
-      setEnrollmentRequests([]);
     } finally {
-      setIsLoadingEnrollmentRequests(false);
+      if(generation===enrollmentLoadGeneration.current)setIsLoadingEnrollmentRequests(false);
     }
   };
 
@@ -395,15 +420,23 @@ export default function TeacherScreen() {
 
   const handleOpenNotification = (notification: ActivityNotification) => {
     setNotificationsOpen(false);
+    if(notification.status==='unread')void handleMarkNotificationRead(notification.id);
+    const target=notificationTarget('teacher',notification);
+    if(target)navigate(target);
+    if(notification.type==='enrollment_request')void loadEnrollmentRequests();
+  };
 
-    if (notification.relatedSubmissionId) {
-      navigate(`/teacher/submissions/${notification.relatedSubmissionId}`);
-      return;
-    }
-
-    if (notification.activityId) {
-      navigate(`/teacher/activities/${notification.activityId}`);
-    }
+  const handleReviewAcademicCor=async(intent:AcademicEnrollmentIntent,status:'accepted'|'rejected',note:string)=>{
+    if(reviewingAcademicId!==null)return;
+    if(!online){toast.error('Internet access is required to review enrollment.');return;}
+    setReviewingAcademicId(intent.id);
+    try {
+      const result=await reviewAcademicCor(intent.id,status,note);
+      toast.success(result.message);
+      if(result.enrollmentRequestId)navigate(`/teacher/teacher_screen/uploads?request=${result.enrollmentRequestId}`);
+      await Promise.all([loadEnrollmentRequests(),loadTeacherOverview(),loadNotifications()]);
+    }catch(e){toast.error(e instanceof Error?e.message:'Unable to review submission.');await loadEnrollmentRequests();}
+    finally{setReviewingAcademicId(null);}
   };
 
   const loadClassManagerData = async (classId: string) => {
@@ -479,11 +512,14 @@ export default function TeacherScreen() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void loadNotifications();
-    }, 60_000);
+      void Promise.all([loadNotifications(), loadEnrollmentRequests()]);
+    }, 15_000);
+    const focus=()=>{void Promise.all([loadNotifications(),loadEnrollmentRequests()]);};
+    window.addEventListener('focus',focus);
 
     return () => {
       window.clearInterval(timer);
+      window.removeEventListener('focus',focus);
     };
   }, []);
 
@@ -499,8 +535,9 @@ export default function TeacherScreen() {
   };
 
   const resetCreateClassForm = () => {
-    setClassName("");
-    setCourseCode("");
+    setClassAcademics({ departmentCode: "", yearLevel: 0 });
+    setClassSubjectId('');
+    setClassSemester(1);
     setDescription("");
   };
 
@@ -516,20 +553,19 @@ export default function TeacherScreen() {
       return;
     }
 
+    if (!classAcademics.departmentCode || !classAcademics.yearLevel) { toast.error("Select the class department and year level."); return; }
+    if (!classSubjectId) { toast.error("Select an official curriculum subject for this department, year and semester."); return; }
     setIsCreatingClass(true);
 
     try {
-      const generatedCode = generateUniqueClassCode(
-        classes.map((classroom) => classroom.code),
-      );
-
-      await createTeacherClass({
-        name: `${courseCode.trim()} - ${className.trim()}`,
+      const createdClass = await createTeacherClass({
+        subjectId: Number(classSubjectId),
+        semester: classSemester,
         description: description.trim(),
-        code: generatedCode,
+        ...classAcademics,
       });
 
-      setLatestCreatedCode(generatedCode);
+      setLatestCreatedCode(createdClass.code);
       setIsCreateModalOpen(false);
       resetCreateClassForm();
       await Promise.all([loadTeacherOverview(), loadTeacherAnalytics()]);
@@ -675,6 +711,9 @@ export default function TeacherScreen() {
         submissionType: activityForm.submissionType,
         allowResubmission: activityForm.allowResubmission,
         maxScore: activityForm.maxScore,
+        rubric: activityForm.rubric ?? [],
+        aiScoringEnabled: activityForm.aiScoringEnabled === true,
+        codeSettings:activityForm.submissionType==='code'?activityForm.codeSettings:undefined,
         programmingLanguage:
           activityForm.submissionType === "code"
             ? activityForm.programmingLanguage
@@ -952,6 +991,8 @@ export default function TeacherScreen() {
         className="workspace-content fixed inset-x-0 bottom-0 top-20 overflow-y-auto px-4 py-6 pb-10 sm:px-6 md:left-20"
       >
         <div className="mx-auto max-w-6xl">
+          {activeSection === "home" && <><AcademicReviewPanel darkMode={darkMode} /><div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border theme-border p-4"><div><p className="font-semibold">Official Subjects</p><p className="text-sm theme-muted">View the curriculum for each department and year level. Designated staff can add and edit subjects.</p></div><Button variant="outline" onClick={() => goToSection('subjects')}>Open Subjects</Button></div><div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border theme-border p-4"><p className="font-semibold">Student Enrollment Requests: {enrollmentRequests.filter(r => r.status === 'pending').length} class approvals / {academicIntents.filter(r => r.teacher_status !== 'rejected').length} COR reviews</p><Button onClick={() => goToSection('uploads')}>Review Enrollment Requests</Button></div></>}
+          {activeSection === "subjects" && <TeacherSubjectsPage />}
           {activeSection === "home" && (
             <TeacherHomeSection
               isLoading={isLoadingOverview}
@@ -999,6 +1040,13 @@ export default function TeacherScreen() {
 
           {activeSection === "uploads" && (
             <TeacherUploadsSection
+              key={location.key}
+              academicIntents={academicIntents}
+              reviewingAcademicId={reviewingAcademicId}
+              onReviewAcademic={(intent,status,note)=>void handleReviewAcademicCor(intent,status,note)}
+              focusIntentId={searchParams.get('intent')||String(academicIntents.find(i=>String(i.class_id)===searchParams.get('class'))?.id||'')}
+              focusRequestId={searchParams.get('request')||enrollmentRequests.find(r=>r.classId===searchParams.get('class'))?.id}
+              darkMode={darkMode}
               requests={enrollmentRequests}
               isLoading={isLoadingEnrollmentRequests}
               reviewingId={reviewingEnrollmentRequestId}
@@ -1048,7 +1096,7 @@ export default function TeacherScreen() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="theme-surface relative w-full max-w-xl overflow-hidden rounded-3xl"
+              className="theme-surface relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl"
             >
               <div className="border-b theme-border px-6 py-5">
                 <p className="text-sm font-medium theme-title">
@@ -1060,32 +1108,10 @@ export default function TeacherScreen() {
               </div>
 
               <form onSubmit={handleCreateClass} className="space-y-4 p-6">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-[var(--app-text)]">
-                    Class Name
-                  </label>
-                  <Input
-                    value={className}
-                    onChange={(event) => setClassName(event.target.value)}
-                    placeholder="e.g. Artificial Intelligence"
-                    required
-                    className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-[var(--app-text)]">
-                    Course Code
-                  </label>
-                  <Input
-                    value={courseCode}
-                    onChange={(event) => setCourseCode(event.target.value)}
-                    placeholder="e.g. IT 301"
-                    required
-                    className="bg-[color-mix(in_srgb,var(--app-surface-strong)_95%,transparent)]"
-                  />
-                </div>
-
+                <AcademicSelectors value={classAcademics} onChange={value => { setClassAcademics(value); setClassSubjectId(''); }} />
+                <SemesterSelect value={classSemester} onChange={value => { setClassSemester(value); setClassSubjectId(''); }} />
+                <CurriculumSubjectSelect selection={classAcademics} semester={classSemester} value={classSubjectId} onChange={setClassSubjectId} />
+                <p className="text-sm theme-muted">The class name and course code come from your selected official subject. A unique student join code is generated when you create the class.</p>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-[var(--app-text)]">
                     Description
@@ -1116,7 +1142,7 @@ export default function TeacherScreen() {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isCreatingClass || !online} title={!online ? "Internet access is required." : undefined}>
+                  <Button type="submit" disabled={isCreatingClass || !online || !classSubjectId} title={!online ? "Internet access is required." : undefined}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     {isCreatingClass ? "Creating..." : "Create Class"}
                   </Button>
@@ -1142,6 +1168,7 @@ export default function TeacherScreen() {
         analyzingSubmissionId={analyzingSubmissionId}
         expandedSubmissionId={expandedSubmissionId}
         focusedActivityId={activityId ?? null}
+        onClassroomUpdated={() => { if (managedClass) void Promise.all([loadClassManagerData(managedClass.id), loadTeacherOverview()]); }}
         onClose={closeClassManager}
         onAnalyzeAll={handleAnalyzeAll}
         onAnalyzeSubmission={(submissionId) =>

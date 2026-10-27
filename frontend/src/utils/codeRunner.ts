@@ -15,6 +15,7 @@ export type CodeRunResult = {
   executionTime?: string | null;
   memory?: number | null;
   exitCode?: number | null;
+  notice?:string;
 };
 
 type CompilerResponse = {
@@ -40,7 +41,7 @@ export const normalizeProgrammingLanguage = (
 
 export const getProgrammingLanguageLabel = (
   language: string | null | undefined,
-) => language?.trim() || "Code";
+) => ({java:'Java',javascript:'JavaScript',python:'Python',dart:'Dart'}[normalizeProgrammingLanguage(language)] || language?.trim() || "Code");
 
 const formatError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -49,13 +50,14 @@ const executeWithCompiler = async (
   code: string,
   language: string,
   stdin: string,
+  activityId:string,
 ): Promise<CodeRunResult> => {
   if (!isConnectionAvailable()) {
     throw createOfflineActionError();
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/classes/code/execute`, {
+    const response = await fetch(`${API_BASE_URL}/classes/activities/${encodeURIComponent(activityId)}/code/run`, {
       method: "POST",
       credentials: "include",
       headers: {
@@ -90,12 +92,14 @@ export async function runCode(
   code: string,
   language: string | null | undefined,
   stdin = "",
+  activityId?:string,
 ): Promise<CodeRunResult> {
   const normalizedLanguage = normalizeProgrammingLanguage(language);
 
   try {
     if (COMPILER_LANGUAGES.has(normalizedLanguage)) {
-      return await executeWithCompiler(code, normalizedLanguage, stdin);
+      if(!activityId)throw new Error('Open the assigned programming activity to run this code.');
+      return await executeWithCompiler(code, normalizedLanguage, stdin,activityId);
     }
 
     // Retain previews for older HTML/CSS activities, although new code

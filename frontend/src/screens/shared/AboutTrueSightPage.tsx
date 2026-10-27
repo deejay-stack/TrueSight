@@ -66,7 +66,7 @@ const featureIcons = [
 export default function AboutTrueSightPage() {
   return (
     <div className="space-y-6">
-      <section className="theme-surface overflow-hidden rounded-3xl px-6 py-7 sm:px-8">
+      <section className="about-introduction theme-surface overflow-hidden rounded-3xl px-6 py-7 sm:px-8">
         <p className="text-sm font-semibold uppercase tracking-wide theme-title">
           TrueSight Capstone System
         </p>
@@ -139,7 +139,7 @@ export default function AboutTrueSightPage() {
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="workspace-card-grid about-feature-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {systemFeatures.map((feature, index) => {
             const Icon = featureIcons[index] ?? ShieldCheck;
 

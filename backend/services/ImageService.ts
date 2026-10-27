@@ -249,9 +249,8 @@ export const analyzeImage = async (fileDataUrl?: string | null, fileName?: strin
       preprocessing: prediction.preprocessing as Record<string, unknown>,
       rawOutput: prediction.rawOutput as number[],
     }),
-    modelName: prediction.modelName, status: "completed", analysisStatus: "completed",
-    reasons: result.details.reasons,
-    probabilities: result.details.probabilities,
+    // Presentation metadata must never replace the canonical raw class or run identity.
+    ...result.details,
     message: "Probabilities are guidance for teacher review, not proof of academic misconduct.",
   };
   return result;

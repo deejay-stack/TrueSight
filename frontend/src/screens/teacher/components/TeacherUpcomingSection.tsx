@@ -1,3 +1,6 @@
+import { WorkspaceEmptyState } from "../../../components/WorkspaceEmptyState";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
+import { CalendarDays } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "../../../components/ui/Card";
 import type { TeacherOverviewActivity } from "../services/teacherClassroomService";
@@ -13,12 +16,7 @@ export function TeacherUpcomingSection({
 }: TeacherUpcomingSectionProps) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--app-text)]">Upcoming</h2>
-        <p className="text-sm theme-muted">
-          Activities with future deadlines across all your classes.
-        </p>
-      </div>
+      <WorkspaceHeading eyebrow="CLASSROOM / SCHEDULE" title="Upcoming" description="A little planning goes a long way. Keep your next deadlines in view." icon={CalendarDays} />
 
       {isLoading ? (
         <Card className="theme-card">
@@ -26,12 +24,10 @@ export function TeacherUpcomingSection({
         </Card>
       ) : upcomingActivities.length === 0 ? (
         <Card className="theme-card">
-          <CardContent className="p-6 text-sm theme-muted">
-            No upcoming activities to display yet.
-          </CardContent>
+          <WorkspaceEmptyState icon={CalendarDays} title="A clear schedule" description="Activities with future deadlines will appear here." />
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="workspace-timeline space-y-3">
           {upcomingActivities.map((activity) => (
             <motion.div key={activity.id} whileHover={{ y: -2 }}>
               <Card className="theme-card">

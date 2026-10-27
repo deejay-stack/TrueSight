@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
-  FileText,
   Gauge,
   Image,
   Layers,
@@ -15,7 +14,6 @@ import { Card, CardContent } from "../../../components/ui/Card";
 import type {
   ClassSubmission,
   SubmissionAnalysisDetails,
-  SuspiciousSentence,
 } from "../services/teacherClassroomService";
 
 type MultiLevelAIDetectionPanelProps = {
@@ -51,17 +49,6 @@ type ClassProbability = {
   probability: number;
 };
 
-type HighlightedToken = {
-  token: string;
-  aiProbability: number;
-};
-
-type HeatmapSegment = {
-  text: string;
-  score: number | null;
-  title?: string;
-};
-
 const asNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
@@ -71,27 +58,6 @@ const asNumber = (value: unknown): number | null => {
   }
 
   return null;
-};
-
-const deriveConfidenceLevel = (confidenceScore: number | null): string => {
-  if (confidenceScore === null) return "Unavailable";
-  if (confidenceScore >= 85) return "Very High";
-  if (confidenceScore >= 72) return "High";
-  if (confidenceScore >= 60) return "Moderate";
-  return "Low";
-};
-
-const getConfidenceTone = (level: string): string => {
-  const normalized = level.toLowerCase();
-
-  if (normalized.includes("very high") || normalized === "high") {
-    return "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200";
-  }
-
-  if (normalized === "moderate") return "bg-amber-500/15 text-amber-800 dark:text-amber-200";
-  if (normalized === "low") return "bg-rose-500/15 text-rose-800 dark:text-rose-200";
-
-  return "bg-[color-mix(in_srgb,var(--app-muted)_20%,transparent)] text-[var(--app-text)]";
 };
 
 const getCardTone = (tone?: string): string => {
@@ -118,24 +84,10 @@ const getProbabilityTone = (score: number): ProbabilityTone => {
   return "human";
 };
 
-const getHeatmapClassName = (score: number): string => {
-  const tone = getProbabilityTone(score);
-  if (tone === "ai") return "heatmap-token heatmap-token-ai";
-  if (tone === "suspicious") return "heatmap-token heatmap-token-suspicious";
-  return "heatmap-token heatmap-token-human";
-};
-
-const getHeatmapLevel = (score: number): string => {
-  const tone = getProbabilityTone(score);
-  if (tone === "ai") return "AI-generated";
-  if (tone === "suspicious") return "Suspicious / Unsure";
-  return "Human-created";
-};
-
 const getVerdictTone = (prediction: string, aiProbability?: number | null): ProbabilityTone => {
-  if (prediction === "AI-generated" || prediction === "Likely AI-generated") return "ai";
-  if (prediction === "Human" || prediction === "Likely human-created") return "human";
-  if (prediction === "Needs Review") return "suspicious";
+  if (prediction === "Possibly AI-Generated" || prediction === "AI-likely" || prediction === "AI-generated" || prediction === "Likely AI-generated") return "ai";
+  if (prediction === "Possibly Human-Created" || prediction === "Human-likely" || prediction === "Human" || prediction === "Likely human-created") return "human";
+  if (prediction === "Inconclusive" || prediction.startsWith("Below AI threshold") || prediction === "Needs Review") return "suspicious";
   if (typeof aiProbability === "number") return getProbabilityTone(aiProbability);
   return "suspicious";
 };
@@ -159,135 +111,6 @@ const getToneBarClass = (tone: ProbabilityTone): string => {
   if (tone === "ai") return "bg-red-500";
   if (tone === "suspicious") return "bg-orange-500";
   return "bg-emerald-500";
-};
-
-const normalizeTokenForSearch = (token: string): string =>
-  token
-    .replace(/^Ġ/, " ")
-    .replace(/^▁/, " ")
-    .replace(/<\/?[^>]+>/g, "")
-    .trim();
-
-const buildTokenHeatmapSegments = (
-  sourceText: string,
-  tokens: HighlightedToken[],
-): HeatmapSegment[] => {
-  if (tokens.length === 0) {
-    return sourceText ? [{ text: sourceText, score: null }] : [];
-  }
-
-  if (!sourceText.trim()) {
-    return tokens.map((entry, index) => ({
-      text: `${entry.token}${index < tokens.length - 1 ? " " : ""}`,
-      score: entry.aiProbability,
-      title: `${entry.aiProbability.toFixed(2)}% AI probability`,
-    }));
-  }
-
-  const segments: HeatmapSegment[] = [];
-  const loweredSource = sourceText.toLowerCase();
-  let cursor = 0;
-  let matchedCount = 0;
-
-  tokens.forEach((entry) => {
-    const needle = normalizeTokenForSearch(entry.token);
-    if (!needle) return;
-
-    const matchIndex = loweredSource.indexOf(needle.toLowerCase(), cursor);
-    if (matchIndex < 0) return;
-
-    if (matchIndex > cursor) {
-      segments.push({ text: sourceText.slice(cursor, matchIndex), score: null });
-    }
-
-    const text = sourceText.slice(matchIndex, matchIndex + needle.length);
-    segments.push({
-      text,
-      score: entry.aiProbability,
-      title: `${entry.aiProbability.toFixed(2)}% AI probability`,
-    });
-
-    matchedCount += 1;
-    cursor = matchIndex + needle.length;
-  });
-
-  if (cursor < sourceText.length) {
-    segments.push({ text: sourceText.slice(cursor), score: null });
-  }
-
-  return matchedCount > 0 ? segments : [{ text: sourceText, score: null }];
-};
-
-const buildSentenceHeatmapSegments = (
-  sourceText: string,
-  sentences: SuspiciousSentence[],
-): HeatmapSegment[] => {
-  if (!sourceText.trim()) return [];
-
-  const segments: HeatmapSegment[] = [];
-  const loweredSource = sourceText.toLowerCase();
-  let cursor = 0;
-  let matchedCount = 0;
-
-  sentences
-    .filter((entry) => entry.aiSuspicionScore >= 35)
-    .forEach((entry) => {
-      const needle = entry.sentence.trim();
-      if (!needle) return;
-
-      const matchIndex = loweredSource.indexOf(needle.toLowerCase(), cursor);
-      if (matchIndex < 0) return;
-
-      if (matchIndex > cursor) {
-        segments.push({ text: sourceText.slice(cursor, matchIndex), score: null });
-      }
-
-      segments.push({
-        text: sourceText.slice(matchIndex, matchIndex + needle.length),
-        score: entry.aiSuspicionScore,
-        title: `Sentence ${entry.sentenceNumber}: ${entry.aiSuspicionScore.toFixed(2)}% suspicious`,
-      });
-
-      matchedCount += 1;
-      cursor = matchIndex + needle.length;
-    });
-
-  if (cursor < sourceText.length) {
-    segments.push({ text: sourceText.slice(cursor), score: null });
-  }
-
-  return matchedCount > 0 ? segments : [{ text: sourceText, score: null }];
-};
-
-const hasHighlightedSegments = (segments: HeatmapSegment[]): boolean =>
-  segments.some((segment) => segment.score !== null);
-
-
-const parseSuspiciousSentences = (value: unknown): SuspiciousSentence[] => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item, index) => {
-      if (typeof item !== "object" || item === null) return null;
-
-      const candidate = item as Record<string, unknown>;
-      const score = asNumber(candidate.aiSuspicionScore);
-      const sentence = typeof candidate.sentence === "string" ? candidate.sentence : null;
-      const sentenceNumber = asNumber(candidate.sentenceNumber);
-      const reasons = Array.isArray(candidate.reasons)
-        ? candidate.reasons.map((reason) => String(reason))
-        : [];
-
-      if (score === null || !sentence) return null;
-
-      return {
-        sentenceNumber: sentenceNumber !== null ? sentenceNumber : index + 1,
-        sentence,
-        aiSuspicionScore: score,
-        reasons,
-      };
-    })
-    .filter((item): item is SuspiciousSentence => item !== null);
 };
 
 const parseScoreCards = (value: unknown): ScoreCard[] => {
@@ -383,24 +206,6 @@ const parseClassProbabilities = (value: unknown): ClassProbability[] => {
     .sort((left, right) => right.probability - left.probability);
 };
 
-const parseHighlightedTokens = (value: unknown): HighlightedToken[] => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => {
-      if (typeof item !== "object" || item === null) return null;
-
-      const candidate = item as Record<string, unknown>;
-      const token = typeof candidate.token === "string" ? candidate.token : null;
-      const aiProbability = asNumber(candidate.aiProbability);
-
-      if (token === null || aiProbability === null) return null;
-
-      return { token, aiProbability };
-    })
-    .filter((item): item is HighlightedToken => item !== null);
-};
-
 const formatScoreCardValue = (card: ScoreCard): string => {
   if (typeof card.value === "number") {
     return `${card.value.toFixed(card.unit === "%" ? 2 : 0)}${card.unit ?? ""}`;
@@ -422,10 +227,6 @@ export function MultiLevelAIDetectionPanel({
 
   const confidenceScore =
     submission.confidenceScore ?? asNumber(details?.confidenceScore);
-  const confidenceLevel =
-    typeof details?.confidenceLevel === "string"
-      ? details.confidenceLevel
-      : deriveConfidenceLevel(confidenceScore);
   const writingConsistencyScore = asNumber(details?.writingConsistencyScore);
   const humanRevisionLikelihood = asNumber(details?.humanRevisionLikelihood);
   const detectorType =
@@ -437,8 +238,8 @@ export function MultiLevelAIDetectionPanel({
       ? (details.integrationStatus as Record<string, unknown>)
       : null;
   const finalPrediction =
-    typeof details?.finalPrediction === "string"
-      ? details.finalPrediction
+    typeof details?.decisionLabel === "string"
+      ? details.decisionLabel
       : typeof details?.verdict === "string"
         ? details.verdict
         : "No verdict yet";
@@ -449,80 +250,34 @@ export function MultiLevelAIDetectionPanel({
   const humanConfidentMax = asNumber(details?.humanConfidentMax);
   const aiConfidentMin = asNumber(details?.aiConfidentMin);
 
-  const allSuspiciousSentences = parseSuspiciousSentences(details?.suspiciousSentences).filter(
-    (entry) => entry.aiSuspicionScore >= 35,
-  );
-  const suspiciousSentences = allSuspiciousSentences
-    .filter((entry) => entry.aiSuspicionScore >= 56)
-    .sort((left, right) => right.aiSuspicionScore - left.aiSuspicionScore)
-    .slice(0, 6);
   const scoreCards = parseScoreCards(details?.scoreCards);
   const timeline = parseTimeline(details?.analysisTimeline);
   const checklist = parseChecklist(details?.reviewChecklist);
   const classProbabilities = parseClassProbabilities(details?.classProbabilities);
-  const highlightedTokens = parseHighlightedTokens(details?.highlightedTokens);
-  const submittedText = typeof submission.contentText === "string" ? submission.contentText : "";
-  const tokenHeatmapSegments = buildTokenHeatmapSegments(submittedText, highlightedTokens);
-  const sentenceHeatmapSegments = buildSentenceHeatmapSegments(
-    submittedText,
-    allSuspiciousSentences,
-  );
-  const heatmapSegments = hasHighlightedSegments(tokenHeatmapSegments)
-    ? tokenHeatmapSegments
-    : sentenceHeatmapSegments;
-  const heatmapSource = hasHighlightedSegments(tokenHeatmapSegments)
-    ? "Stored token probabilities"
-    : "sentence-level suspicious sections";
   const imageProfile =
     typeof details?.imageProfile === "object" && details.imageProfile !== null
       ? (details.imageProfile as Record<string, unknown>)
       : null;
   const isImageAnalysis = detectorType === "image" || submission.submissionType === "image";
 
-  const fallbackScoreCards: ScoreCard[] = [
-    {
-      id: "aiProbability",
-      label: "AI probability",
-      value: submission.aiProbability ?? 0,
-      unit: "%",
-      tone: (submission.aiProbability ?? 0) >= 60 ? "risk" : "calm",
-    },
-    {
-      id: "confidenceScore",
-      label: "Confidence score",
-      value: confidenceScore ?? 0,
-      unit: "%",
-      tone: (confidenceScore ?? 0) >= 72 ? "calm" : "warning",
-    },
-    {
-      id: "writingConsistencyScore",
-      label: "Writing consistency",
-      value: writingConsistencyScore ?? 0,
-      unit: "%",
-      tone: (writingConsistencyScore ?? 0) >= 70 ? "warning" : "calm",
-    },
-    {
-      id: "humanRevisionLikelihood",
-      label: "Human revision signs",
-      value: humanRevisionLikelihood ?? 0,
-      unit: "%",
-      tone: (humanRevisionLikelihood ?? 0) >= 55 ? "calm" : "warning",
-    },
-  ];
+  const fallbackScoreCards: ScoreCard[] = [];
+  const recordedCards = [
+    ["aiProbability", "AI model score", submission.aiProbability],
+    ["confidenceScore", "Largest class score", confidenceScore],
+    ["writingConsistencyScore", "Writing consistency", writingConsistencyScore],
+    ["humanRevisionLikelihood", "Human revision signs", humanRevisionLikelihood],
+  ] as const;
+  for (const [id, label, value] of recordedCards) {
+    if (typeof value === "number" && Number.isFinite(value)) fallbackScoreCards.push({ id, label, value, unit: "%" });
+  }
   const analysisFailed = details?.analysisStatus === "failed";
   const visibleScoreCards = analysisFailed ? [] : scoreCards.length > 0 ? scoreCards : fallbackScoreCards;
   const tabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
-    {
-      id: "evidence",
-      label: detectorType === "image" ? "Classes" : "Sentences",
-      icon: Layers,
-    },
-    {
-      id: "tokens",
-      label: detectorType === "image" ? "Profile" : "Tokens",
-      icon: detectorType === "image" ? Image : FileText,
-    },
+    ...(isImageAnalysis ? [
+      { id: 'evidence', label: 'Classes', icon: Layers },
+      { id: 'tokens', label: 'Profile', icon: Image },
+    ] as const : []),
     { id: "checklist", label: "Review", icon: ListTodo },
   ] as const;
 
@@ -551,10 +306,10 @@ export function MultiLevelAIDetectionPanel({
             <span
               className={[
                 "rounded-full px-3 py-1 text-xs font-semibold",
-                getConfidenceTone(confidenceLevel),
+                getToneBadgeClass(finalTone),
               ].join(" ")}
             >
-              {confidenceLevel} confidence
+              {finalPrediction}
             </span>
           </div>
         </div>
@@ -625,7 +380,7 @@ export function MultiLevelAIDetectionPanel({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] p-3">
-                    <p className="text-xs theme-muted">Confidence</p>
+                    <p className="text-xs theme-muted">Largest class score</p>
                     <p className="text-lg font-bold text-[var(--app-text)]">
                       {typeof confidenceScore === "number"
                         ? `${confidenceScore.toFixed(2)}%`
@@ -633,7 +388,7 @@ export function MultiLevelAIDetectionPanel({
                     </p>
                   </div>
                   <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_88%,transparent)] p-3">
-                    <p className="text-xs theme-muted">AI probability</p>
+                    <p className="text-xs theme-muted">AI model score</p>
                     <p className="text-lg font-bold text-[var(--app-text)]">
                       {typeof submission.aiProbability === "number"
                         ? `${submission.aiProbability.toFixed(2)}%`
@@ -691,6 +446,7 @@ export function MultiLevelAIDetectionPanel({
                 {analysisMessage && (
                   <p className="mt-2 text-sm theme-muted">{analysisMessage}</p>
                 )}
+                <details className="mt-2 text-xs theme-muted"><summary className="cursor-pointer">Advanced decision details</summary>
                 {threshold !== null && (
                   <p className="mt-2 text-xs theme-muted">
                     Threshold: {(threshold * 100).toFixed(detectorType === "text" ? 8 : 2)}%
@@ -699,6 +455,7 @@ export function MultiLevelAIDetectionPanel({
                       : ""}
                   </p>
                 )}
+                </details>
                 {integrationStatus && (
                   <p className="mt-2 text-sm theme-muted">
                     {String(integrationStatus.message ?? "Integration status unavailable.")}
@@ -731,7 +488,7 @@ export function MultiLevelAIDetectionPanel({
                           <p className="text-sm font-medium text-[var(--app-text)]">
                             {step.label}
                           </p>
-                          <p className="text-xs theme-muted">{step.detail}</p>
+                          <details className="text-xs theme-muted"><summary>Technical details</summary>{step.detail}</details>
                         </div>
                       </div>
                     ))}
@@ -747,8 +504,7 @@ export function MultiLevelAIDetectionPanel({
                   <p className="text-xs theme-muted">Interpretation</p>
                 </div>
                 <p className="mt-1 text-sm text-[var(--app-text)]">
-                  Confidence is the larger class probability. The returned verdict
-                  uses the model-specific threshold, not the confidence label.
+                  These model scores are not calibrated authorship probabilities. A large score does not establish that this prediction is correct.
                 </p>
               </div>
               <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-3">
@@ -772,174 +528,14 @@ export function MultiLevelAIDetectionPanel({
           </>
         )}
 
-        {activeView === "evidence" && (
-          <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <ListChecks className="h-4 w-4 text-[var(--app-accent)]" />
-              <p className="text-sm font-semibold text-[var(--app-text)]">
-                {detectorType === "image"
-                  ? "Image class probability evidence"
-                  : "Sentence-by-sentence suspicious sections"}
-              </p>
-            </div>
-
-            {detectorType === "image" ? (
-              classProbabilities.length === 0 ? (
-                <div className="rounded-lg border border-dashed theme-border p-3 text-sm theme-muted">
-                  No class probabilities were returned. Add a configured image model to
-                  enable model-backed image analysis.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {classProbabilities.map((entry) => (
-                    <div key={entry.label} className="rounded-lg border theme-border p-3">
-                      <div className="flex items-center justify-between gap-3 text-xs theme-muted">
-                        <span>{entry.label}</span>
-                        <span>{entry.probability.toFixed(2)}%</span>
-                      </div>
-                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--app-muted)_18%,transparent)]">
-                        <div
-                          className={`h-full ${getToneBarClass(getProbabilityTone(entry.probability))}`}
-                          style={{
-                            width: `${Math.min(Math.max(entry.probability, 0), 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : suspiciousSentences.length === 0 ? (
-              <div className="rounded-lg border border-dashed theme-border p-3 text-sm theme-muted">
-                No highly suspicious sentence sections were detected in this submission.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {suspiciousSentences.map((entry) => (
-                  <div
-                    key={`${entry.sentenceNumber}-${entry.aiSuspicionScore}`}
-                    className="rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] p-3"
-                  >
-                    <div className="flex items-center justify-between gap-3 text-xs theme-muted">
-                      <span>Sentence {entry.sentenceNumber}</span>
-                      <span>{entry.aiSuspicionScore.toFixed(2)}% suspicious</span>
-                    </div>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--app-muted)_18%,transparent)]">
-                      <div
-                        className={`h-full ${getToneBarClass(getProbabilityTone(entry.aiSuspicionScore))}`}
-                        style={{
-                          width: `${Math.min(Math.max(entry.aiSuspicionScore, 0), 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--app-text)]">
-                      {entry.sentence}
-                    </p>
-                    {entry.reasons.length > 0 && (
-                      <p className="mt-1 text-xs theme-muted">
-                        Signals: {entry.reasons.join(" | ")}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeView === "tokens" && (
-          <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">
-            <div className="mb-3 flex items-center gap-2">
-              {detectorType === "image" ? (
-                <Image className="h-4 w-4 text-[var(--app-accent)]" />
-              ) : (
-                <FileText className="h-4 w-4 text-[var(--app-accent)]" />
-              )}
-              <p className="text-sm font-semibold text-[var(--app-text)]">
-                {detectorType === "image" ? "Image technical profile" : "Token heatmap"}
-              </p>
-            </div>
-
-            {detectorType === "image" ? (
-              !imageProfile ? (
-                <div className="rounded-lg border border-dashed theme-border p-3 text-sm theme-muted">
-                  Image metadata was unavailable for this run.
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {Object.entries(imageProfile).map(([key, value]) => (
-                    <div key={key} className="rounded-lg border theme-border p-3">
-                      <p className="text-xs uppercase tracking-wide theme-muted">{key}</p>
-                      <p className="mt-1 break-words text-sm font-semibold text-[var(--app-text)]">
-                        {typeof value === "object" && value !== null
-                          ? JSON.stringify(value)
-                          : String(value)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : !hasHighlightedSegments(heatmapSegments) ? (
-              <div className="rounded-lg border border-dashed theme-border p-3 text-sm theme-muted">
-                No token or sentence segments crossed the heatmap review threshold for this run.
-              </div>
-            ) : (
-              <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_94%,transparent)] p-4 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--app-text)]">
-                      Token Heatmap
-                    </p>
-                    <p className="text-xs theme-muted">
-                      Highlight source: {heatmapSource}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="inline-flex items-center gap-1 rounded-full border theme-border px-2 py-1 text-[var(--app-text)]">
-                      <span className="h-3 w-5 rounded bg-[var(--heatmap-human-bg)]" />
-                      Green: Human-created
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border theme-border px-2 py-1 text-[var(--app-text)]">
-                      <span className="h-3 w-5 rounded bg-[var(--heatmap-suspicious-bg)]" />
-                      Orange: Suspicious / Unsure
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border theme-border px-2 py-1 text-[var(--app-text)]">
-                      <span className="h-3 w-5 rounded bg-[var(--heatmap-ai-bg)]" />
-                      Red: AI-generated
-                    </span>
-                  </div>
-                </div>
-
-                <div className="max-h-[420px] overflow-auto rounded-lg border theme-border bg-[color-mix(in_srgb,var(--app-surface-strong)_94%,transparent)] p-4 text-sm leading-9 text-[var(--app-text)]">
-                  {heatmapSegments.map((segment, index) =>
-                    segment.score === null ? (
-                      <span key={`${index}-${segment.text.slice(0, 8)}`}>
-                        {segment.text}
-                      </span>
-                    ) : (
-                      <mark
-                        key={`${index}-${segment.text.slice(0, 8)}`}
-                        title={
-                          segment.title ??
-                          `${getHeatmapLevel(segment.score)}: ${segment.score.toFixed(2)}%`
-                        }
-                        className={getHeatmapClassName(segment.score)}
-                      >
-                        {segment.text}
-                      </mark>
-                    ),
-                  )}
-                </div>
-
-                <p className="mt-3 text-xs theme-muted">
-                  Green spans are likely human-created, orange spans need review, and
-                  red spans show high AI likelihood. Review highlighted text with the
-                  assignment prompt and student context before making a decision.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        {activeView === "evidence" && isImageAnalysis && <div className="rounded-xl border theme-border p-4">
+          <div className="mb-3 flex items-center gap-2"><ListChecks className="h-4 w-4" /><h4 className="font-semibold">Image class probability evidence</h4></div>
+          {!classProbabilities.length ? <p className="text-sm theme-muted">Image class probabilities are unavailable.</p> : <div className="grid gap-3 sm:grid-cols-2">{classProbabilities.map(entry => <div key={entry.label} className="rounded-lg border theme-border p-3"><p className="text-sm">{entry.label}: {entry.probability.toFixed(2)}%</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--app-muted)_18%,transparent)]"><div className={`h-full ${getToneBarClass(getProbabilityTone(entry.probability))}`} style={{ width: `${clampPercent(entry.probability)}%` }} /></div></div>)}</div>}
+        </div>}
+        {activeView === "tokens" && isImageAnalysis && <div className="rounded-xl border theme-border p-4">
+          <div className="mb-3 flex items-center gap-2"><Image className="h-4 w-4" /><h4 className="font-semibold">Image technical profile</h4></div>
+          {!imageProfile ? <p className="text-sm theme-muted">Image metadata was unavailable for this run.</p> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(imageProfile).map(([key, value]) => <div key={key} className="rounded-lg border theme-border p-3"><p className="text-xs uppercase tracking-wide theme-muted">{key}</p><p className="mt-1 break-words text-sm font-semibold">{typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}</p></div>)}</div>}
+        </div>}
 
         {activeView === "checklist" && (
           <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_90%,transparent)] p-4">

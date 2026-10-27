@@ -1,3 +1,4 @@
+import { DocumentPreview } from "../../components/documents/DocumentPreview";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -19,7 +20,6 @@ import {
   type DocumentPreviewType,
 } from "../../services/classService";
 import {
-  documentCanUseNativeFrame,
   formatFileSize,
   loadDraftDocument,
   type PreviewableDocument,
@@ -27,7 +27,7 @@ import {
 import { navigateBack } from "../../utils/navigation";
 
 const isPreviewType = (value?: string): value is DocumentPreviewType =>
-  value === "activity-attachment" || value === "submission";
+  value === "activity-attachment" || value === "submission" || value === "cor";
 
 const getDocumentIcon = (document: PreviewableDocument) => {
   const type = document.fileType?.toLowerCase() ?? "";
@@ -43,19 +43,6 @@ const getDocumentIcon = (document: PreviewableDocument) => {
   return FileText;
 };
 
-const dataUrlToText = async (dataUrl: string | null): Promise<string | null> => {
-  if (!dataUrl?.startsWith("data:text/")) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(dataUrl);
-    return await response.text();
-  } catch {
-    return null;
-  }
-};
-
 export default function DocumentViewerPage() {
   const navigate = useNavigate();
   const { user, darkMode } = useAuth();
@@ -65,7 +52,6 @@ export default function DocumentViewerPage() {
   }>();
 
   const [document, setDocument] = useState<PreviewableDocument | null>(null);
-  const [textPreview, setTextPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,7 +64,6 @@ export default function DocumentViewerPage() {
       }
 
       setLoading(true);
-      setTextPreview(null);
 
       try {
         const payload =
@@ -98,11 +83,6 @@ export default function DocumentViewerPage() {
         }
 
         setDocument(payload);
-        const textFromDataUrl = await dataUrlToText(payload.dataUrl);
-
-        if (active) {
-          setTextPreview(payload.textContent ?? textFromDataUrl);
-        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to load document.";
         toast.error(message);
@@ -125,13 +105,6 @@ export default function DocumentViewerPage() {
     () => (document ? getDocumentIcon(document) : FileText),
     [document],
   );
-
-  const nativeFrameSupported = document ? documentCanUseNativeFrame(document) : false;
-  const isImage = document?.fileType?.toLowerCase().startsWith("image/") ?? false;
-  const isPdf =
-    document?.fileType?.toLowerCase() === "application/pdf" ||
-    document?.fileName.toLowerCase().endsWith(".pdf") ||
-    false;
 
   const role = user?.role ?? "teacher";
 
@@ -177,25 +150,25 @@ export default function DocumentViewerPage() {
             <Card className="theme-card overflow-hidden">
               <CardContent className="p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-accent)_14%,transparent)] text-[var(--app-accent)]">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="theme-muted text-xs uppercase tracking-wide">
-                        {document.kind === "activity-attachment"
+                        {document.kind === "cor" ? "Certificate of Registration" : document.kind === "activity-attachment"
                           ? "Activity Attachment"
                           : document.kind === "submission"
                             ? "Submission Document"
                             : "Draft Document"}
                       </p>
-                      <h1 className="mt-1 text-2xl font-bold text-[var(--app-text)]">
+                      <h1 className="mt-1 break-words text-2xl font-bold text-[var(--app-text)]">
                         {document.fileName}
                       </h1>
                       <p className="mt-1 text-sm theme-muted">{document.title}</p>
                     </div>
                   </div>
-                  <div className="grid gap-2 text-sm sm:min-w-56">
+                  <div className="grid min-w-0 gap-2 text-sm sm:min-w-56">
                     {document.className && (
                       <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] px-3 py-2">
                         <p className="text-xs theme-muted">Class</p>
@@ -204,7 +177,7 @@ export default function DocumentViewerPage() {
                     )}
                     <div className="rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] px-3 py-2">
                       <p className="text-xs theme-muted">File</p>
-                      <p className="font-medium text-[var(--app-text)]">
+                      <p className="break-all font-medium text-[var(--app-text)]">
                         {document.fileType ?? "Unknown type"} - {formatFileSize(document.fileSize)}
                       </p>
                     </div>
@@ -221,48 +194,7 @@ export default function DocumentViewerPage() {
               </CardContent>
             </Card>
 
-            <Card className="theme-card overflow-hidden">
-              <CardContent className="p-0">
-                {isImage && document.dataUrl ? (
-                  <div className="flex min-h-[60vh] items-center justify-center bg-[color-mix(in_srgb,var(--app-bg)_72%,black)] p-4">
-                    <img
-                      src={document.dataUrl}
-                      alt={document.fileName}
-                      className="max-h-[72vh] max-w-full rounded-lg object-contain shadow-[var(--app-shadow)]"
-                    />
-                  </div>
-                ) : isPdf && document.dataUrl ? (
-                  <iframe
-                    title={document.fileName}
-                    src={document.dataUrl}
-                    className="h-[72vh] w-full border-0 bg-white"
-                  />
-                ) : textPreview ? (
-                  <pre className="max-h-[72vh] overflow-auto whitespace-pre-wrap p-5 text-sm leading-6 text-[var(--app-text)]">
-                    {textPreview}
-                  </pre>
-                ) : nativeFrameSupported && document.dataUrl ? (
-                  <iframe
-                    title={document.fileName}
-                    src={document.dataUrl}
-                    className="h-[72vh] w-full border-0 bg-[var(--app-surface)]"
-                  />
-                ) : (
-                  <div className="flex min-h-[52vh] items-center justify-center p-6">
-                    <div className="max-w-md rounded-2xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_86%,transparent)] p-5 text-center">
-                      <Icon className="mx-auto h-10 w-10 text-[var(--app-accent)]" />
-                      <p className="mt-3 font-semibold text-[var(--app-text)]">
-                        Preview stored for {document.fileName}
-                      </p>
-                      <p className="mt-2 text-sm theme-muted">
-                        This format is preserved in-app. Native browser rendering may be limited
-                        for Word documents.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <DocumentPreview source={document} darkMode={darkMode} />
           </motion.div>
         )}
         </div>

@@ -1,4 +1,9 @@
-﻿import { AnimatePresence, motion } from "framer-motion";
+import { RubricBuilder, ActivityRubricEditor } from "./RubricBuilder";
+import { ClassEnrollmentSettings } from "./ClassEnrollmentSettings";
+import {CodeActivityOptions,TeacherCodeSettings} from '../../../components/code/CodeActivityOptions';
+import {defaultCodeSettings,type CodeSettings} from '../../../services/codeWorkspaceService';
+import type { RubricCriterion } from "../../../services/lmsService";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarClock,
   Code2,
@@ -23,6 +28,9 @@ import type {
 } from "../services/teacherClassroomService";
 
 type ActivityFormState = {
+  codeSettings?:CodeSettings;
+  aiScoringEnabled?: boolean;
+  rubric?: RubricCriterion[];
   title: string;
   instructor: string;
   description: string;
@@ -54,6 +62,7 @@ type TeacherClassManagerModalProps = {
   expandedSubmissionId: string | null;
   focusedActivityId?: string | null;
   onClose: () => void;
+  onClassroomUpdated: () => void;
   onAnalyzeAll: () => void;
   onAnalyzeSubmission: (submissionId: string) => void;
   onOpenSubmissionPage: (submissionId: string) => void;
@@ -82,13 +91,11 @@ const PROGRAMMING_LANGUAGES = [
 
 const getDisplayPrediction = (submission: ClassSubmission) => {
   const prediction =
-    typeof submission.analysisDetails?.finalPrediction === "string"
-      ? submission.analysisDetails.finalPrediction
+    typeof submission.analysisDetails?.decisionLabel === "string"
+      ? submission.analysisDetails.decisionLabel
       : null;
 
-  if (prediction === "AI-generated") return "Likely AI-generated";
-  if (prediction === "Human") return "Likely Human-created";
-  if (prediction === "Needs Review") return "Needs Manual Review";
+  if (prediction) return prediction;
 
   return typeof submission.aiProbability === "number"
     ? `${submission.aiProbability.toFixed(2)}% AI probability`
@@ -101,17 +108,17 @@ const isImageSubmission = (submission: ClassSubmission) =>
 
 const getVerdictToneClass = (submission: ClassSubmission) => {
   const prediction =
-    typeof submission.analysisDetails?.finalPrediction === "string"
-      ? submission.analysisDetails.finalPrediction
+    typeof submission.analysisDetails?.decisionLabel === "string"
+      ? submission.analysisDetails.decisionLabel
       : null;
 
-  if (prediction === "AI-generated") {
+  if (prediction === "Possibly AI-Generated" || prediction === "AI-likely" || prediction === "AI-generated") {
     return "bg-[var(--heatmap-ai-bg)] text-[var(--heatmap-ai-text)]";
   }
-  if (prediction === "Human") {
+  if (prediction === "Possibly Human-Created" || prediction === "Human-likely" || prediction === "Human") {
     return "bg-[var(--heatmap-human-bg)] text-[var(--heatmap-human-text)]";
   }
-  if (prediction === "Needs Review") {
+  if (prediction === "Inconclusive" || prediction?.startsWith("Below AI threshold") || prediction === "Needs Review") {
     return "bg-[var(--heatmap-suspicious-bg)] text-[var(--heatmap-suspicious-text)]";
   }
 
@@ -144,6 +151,7 @@ export function TeacherClassManagerModal({
   expandedSubmissionId,
   focusedActivityId,
   onClose,
+  onClassroomUpdated,
   onAnalyzeAll,
   onAnalyzeSubmission,
   onOpenSubmissionPage,
@@ -204,6 +212,7 @@ export function TeacherClassManagerModal({
                 <p className="text-sm theme-muted">Loading class data...</p>
               ) : (
                 <>
+                  <ClassEnrollmentSettings key={`${classroom.id}-${classroom.departmentCode}-${classroom.yearLevel}-${classroom.semester}-${classroom.subjectId}-${classroom.enrollmentOpen}`} classroom={classroom} onSaved={onClassroomUpdated} />
                   <div className="order-1 grid grid-cols-2 gap-3 md:grid-cols-4">
                     <Card className="theme-card">
                       <CardContent className="p-3">
@@ -300,7 +309,8 @@ export function TeacherClassManagerModal({
                               min={1}
                               max={10000}
                               step="0.01"
-                              value={activityForm.maxScore}
+                              disabled={Boolean(activityForm.rubric?.some(c => c.title.trim() || c.description.trim() || c.maxPoints))}
+                              value={activityForm.rubric?.some(c => c.title.trim() || c.description.trim() || c.maxPoints) ? Number(activityForm.rubric.reduce((s, c) => s + c.maxPoints, 0).toFixed(2)) : activityForm.maxScore}
                               onChange={(event) =>
                                 onChangeActivityForm({
                                   maxScore: Number(event.target.value) || 0,
@@ -354,6 +364,9 @@ export function TeacherClassManagerModal({
                             />
                           </div>
                         )}
+
+                        {activityForm.submissionType==='code'&&<CodeActivityOptions value={activityForm.codeSettings??defaultCodeSettings} onChange={codeSettings=>onChangeActivityForm({codeSettings})}/>}
+                        <RubricBuilder value={activityForm.rubric ?? []} onChange={rubric => onChangeActivityForm({ rubric })} aiScoringEnabled={activityForm.aiScoringEnabled} onAiScoringChange={aiScoringEnabled => onChangeActivityForm({ aiScoringEnabled })} />
 
                         <label className="flex items-center gap-3 rounded-xl border theme-border bg-[color-mix(in_srgb,var(--app-surface)_82%,transparent)] px-3 py-2 text-sm text-[var(--app-text)]">
                           <input
@@ -488,6 +501,8 @@ export function TeacherClassManagerModal({
                                     </span>
                                   )}
                                 </div>
+                                <ActivityRubricEditor key={`${activity.id}-${activity.maxScore}`} activity={activity} onSaved={onClassroomUpdated} />
+                                {activity.submissionType==='code'&&<TeacherCodeSettings activityId={activity.id}/>}
                               </div>
                             );
                           })}

@@ -1,0 +1,7 @@
+import {useEffect,useState} from 'react';
+import {codeRequest,type CodeHistory} from '../../services/codeWorkspaceService';
+export function TeacherCodeResults({activityId,studentId,version}:{activityId:string;studentId:string;version:number}){
+  const [records,setRecords]=useState<CodeHistory[]>([]),[status,setStatus]=useState('Loading code records...');
+  useEffect(()=>{let active=true;void codeRequest<{runs:CodeHistory[]}>(activityId,`history?studentId=${encodeURIComponent(studentId)}`).then(data=>{if(active){setRecords(data.runs.filter(r=>r.purpose==='submission'&&r.submitted_version===version));setStatus('');}}).catch(e=>{if(active)setStatus(e instanceof Error?e.message:'Code evaluation records unavailable.');});return()=>{active=false;};},[activityId,studentId,version]);
+  return <section className="min-w-0 space-y-2 rounded-xl border theme-border p-3 text-sm"><h3 className="font-semibold">Code evaluation — submitted version {version}</h3><p className="theme-muted">Technical results support rubric review. Your approved score remains the official grade.</p>{status&&<p role="status">{status}</p>}{!status&&!records.length&&<p>No saved technical evaluation for this version.</p>}{records.map(r=><details key={r.id}><summary className="cursor-pointer">{new Date(r.created_at).toLocaleString()} — {r.language} — source SHA-256 {r.source_hash.slice(0,12)}</summary><pre className="max-h-80 overflow-auto whitespace-pre rounded-lg bg-[var(--app-bg-soft)] p-3">{JSON.stringify(r.result,null,2)}</pre></details>)}</section>;
+}

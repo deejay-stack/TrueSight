@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { validatePrediction } from './DetectionResult.js';
 
 export type DetectorType = "text" | "code" | "image";
 export type ModelResult = {
@@ -128,5 +129,6 @@ export const infer = async (detectorType: DetectorType, input: { text?: string; 
       ![result.aiProbability, result.humanProbability].every((p) => typeof p === "number" && Number.isFinite(p) && p >= 0 && p <= 1) ||
       Math.abs(result.aiProbability + result.humanProbability - 1) > 1e-5 ||
       !Number.isFinite(result.threshold)) throw new Error("Invalid inference result.");
+  validatePrediction(result);
   return result;
 };

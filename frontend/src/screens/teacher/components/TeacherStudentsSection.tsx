@@ -1,3 +1,6 @@
+import { WorkspaceEmptyState } from "../../../components/WorkspaceEmptyState";
+import { WorkspaceHeading } from "../../../components/WorkspaceHeading";
+import { UsersRound } from "lucide-react";
 import { motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Card, CardContent } from "../../../components/ui/Card";
@@ -22,14 +25,9 @@ export function TeacherStudentsSection({
   ).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.email.localeCompare(b.email));
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--app-text)]">All Students</h2>
-        <p className="text-sm theme-muted">
-          Unique student list across all your classes, deduplicated by username + email.
-        </p>
-      </div>
+      <WorkspaceHeading eyebrow="CLASSROOM / PEOPLE" title="All Students" description="Find the people in your classes, with enrollment and submission details at a glance." icon={UsersRound} />
 
-      <div className="space-y-2">
+      <div className="workspace-search-panel space-y-2">
         <label htmlFor="all-student-search" className="block text-sm theme-muted">Search students by name or email</label>
         <Input id="all-student-search" type="search" placeholder="Search students..." value={search} onChange={(event) => setSearch(event.target.value)} />
         {!isLoading && <p className="text-xs theme-muted">{visibleStudents.length} of {students.length} students · Name A–Z</p>}
@@ -41,9 +39,7 @@ export function TeacherStudentsSection({
         </Card>
       ) : students.length === 0 ? (
         <Card className="theme-card">
-          <CardContent className="p-6 text-sm theme-muted">
-            No students enrolled in your classes yet.
-          </CardContent>
+          <WorkspaceEmptyState icon={UsersRound} title="A learning community in the making" description="Enrolled students will appear here when they join your classes." />
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -51,8 +47,8 @@ export function TeacherStudentsSection({
           {visibleStudents.map((student) => (
             <motion.div key={`${student.email}-${student.name}`} whileHover={{ y: -2 }}>
               <Card className="theme-card">
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div className="flex items-center gap-3">
+                <CardContent className="student-roster-row flex flex-wrap items-center justify-between gap-3 p-5">
+                  <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-10 w-10 border theme-border">
                       {student.profileImageUrl ? (
                         <AvatarImage src={student.profileImageUrl} alt={student.name} />
@@ -62,7 +58,7 @@ export function TeacherStudentsSection({
                       </AvatarFallback>
                     </Avatar>
 
-                    <div>
+                    <div className="min-w-0 break-words">
                       <p className="font-semibold text-[var(--app-text)]">{student.name}</p>
                       <p className="text-xs theme-muted">{student.email}</p>
                     </div>

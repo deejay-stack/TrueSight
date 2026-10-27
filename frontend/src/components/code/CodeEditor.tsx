@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect,useMemo,useState } from "react";
+import {Compartment} from '@codemirror/state';
 import CodeMirror from "@uiw/react-codemirror";
 import { css } from "@codemirror/lang-css";
 import { cpp } from "@codemirror/lang-cpp";
@@ -9,7 +10,10 @@ import { php } from "@codemirror/lang-php";
 import { python } from "@codemirror/lang-python";
 import { sql } from "@codemirror/lang-sql";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorView } from "@codemirror/view";
+import { EditorView,keymap } from "@codemirror/view";
+import {lintGutter,setDiagnostics} from '@codemirror/lint';
+import {dartLanguage,dartFolding} from './dartLanguage';
+import type {CodeDiagnostic} from '../../services/codeWorkspaceService';
 import { tags } from "@lezer/highlight";
 
 type CodeEditorProps = {
@@ -20,16 +24,21 @@ type CodeEditorProps = {
   minHeight?: number;
   ariaLabel?: string;
   darkMode?: boolean;
+  diagnostics?: CodeDiagnostic[];
+  focusLocation?: {line:number;column:number;token:number}|null;
+  onRun?:()=>void;
+  onSave?:()=>void;
 };
 
 const normalizeLanguage = (language: string | null | undefined) =>
   (language ?? "").trim().toLowerCase().replace(/\s+/g, "");
+const editorSetup={lineNumbers:true,foldGutter:true,highlightActiveLine:true,highlightActiveLineGutter:true,bracketMatching:true,closeBrackets:true,autocompletion:true,indentOnInput:true,syntaxHighlighting:true,history:true,searchKeymap:true};
 
 const getLanguageExtension = (language: string | null | undefined) => {
   switch (normalizeLanguage(language)) {
     case "javascript":
     case "js":
-      return javascript({ jsx: true });
+      return javascript();
     case "typescript":
     case "ts":
       return javascript({ typescript: true, jsx: true });
@@ -43,8 +52,8 @@ const getLanguageExtension = (language: string | null | undefined) => {
     case "cpp":
     case "c#":
     case "csharp":
-    case "dart":
       return cpp();
+    case "dart":return [dartLanguage,dartFolding];
     case "html":
       return html();
     case "css":
@@ -92,13 +101,33 @@ export function CodeEditor({
   minHeight = 420,
   ariaLabel = "Code editor",
   darkMode = false,
+  diagnostics,
+  focusLocation,
+  onRun,
+  onSave,
 }: CodeEditorProps) {
+  const [view,setView]=useState<EditorView|null>(null);
+  const shortcuts=useMemo(()=>new Compartment(),[]);
+  useEffect(()=>{
+    if(!view)return;view.dispatch({effects:shortcuts.reconfigure(keymap.of([{key:'Mod-Enter',run:()=>{if(!onRun)return false;onRun();return true;}},{key:'Mod-s',run:()=>{if(!onSave)return false;onSave();return true;}}]))});
+  },[view,onRun,onSave,shortcuts,language,darkMode]);
+  useEffect(()=>{
+    if(!view||!diagnostics)return;
+    const position=(line:number,column:number)=>{const at=view.state.doc.line(Math.max(1,Math.min(view.state.doc.lines,line)));return Math.min(at.to,at.from+Math.max(0,column-1));};
+    view.dispatch(setDiagnostics(view.state,diagnostics.map(d=>{const from=position(d.line,d.column),to=d.endColumn?position(d.endLine??d.line,d.endColumn):Math.min(view.state.doc.length,from+1);return {from,to:Math.max(from,to),severity:d.severity,message:d.message,source:d.source};})));
+  },[diagnostics,value,view]);
+  useEffect(()=>{
+    if(!view||!focusLocation)return;const line=view.state.doc.line(Math.max(1,Math.min(view.state.doc.lines,focusLocation.line))),at=Math.min(line.to,line.from+Math.max(0,focusLocation.column-1));
+    view.dispatch({selection:{anchor:at},effects:EditorView.scrollIntoView(at,{y:'center'})});view.focus();
+  },[focusLocation,view]);
   const editorHighlightStyle = darkMode
     ? darkEditorHighlightStyle
     : lightEditorHighlightStyle;
   const extensions = useMemo(
     () => [
       getLanguageExtension(language),
+      lintGutter(),
+      shortcuts.of([]),
       syntaxHighlighting(editorHighlightStyle),
       EditorView.theme(
         {
@@ -151,7 +180,7 @@ export function CodeEditor({
         { dark: darkMode },
       ),
     ],
-    [darkMode, editorHighlightStyle, language, minHeight],
+    [darkMode, editorHighlightStyle, language, minHeight,shortcuts],
   );
 
   return (
@@ -159,21 +188,13 @@ export function CodeEditor({
       <CodeMirror
         value={value}
         onChange={onChange}
+        onCreateEditor={setView}
+        indentWithTab
       readOnly={readOnly}
       editable={!readOnly}
       theme={darkMode ? "dark" : "light"}
         extensions={extensions}
-        basicSetup={{
-          lineNumbers: true,
-          foldGutter: true,
-          highlightActiveLine: true,
-          highlightActiveLineGutter: true,
-          bracketMatching: true,
-          closeBrackets: true,
-          autocompletion: true,
-          indentOnInput: true,
-          syntaxHighlighting: true,
-        }}
+        basicSetup={editorSetup}
       />
     </div>
   );

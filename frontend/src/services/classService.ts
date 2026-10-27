@@ -1,3 +1,6 @@
+import { lmsRequest } from "./lmsService";
+import type {CodeSettings} from './codeWorkspaceService';
+import type { RubricCriterion, RubricAssessment } from "./lmsService";
 import axios, { type AxiosProgressEvent } from "axios";
 import { API_BASE_URL } from "../config/api";
 import {
@@ -14,6 +17,15 @@ import {
 } from "./offlineCache";
 
 export type TeacherClass = {
+  curriculumActive?: boolean;
+  semester?: number;
+  subjectId?: number | null;
+  subjectCode?: string | null;
+  subjectName?: string | null;
+  gradeLevel?: string | null;
+  departmentCode?: string | null;
+  yearLevel?: number | null;
+  enrollmentOpen?: boolean;
   id: string;
   name: string;
   code: string;
@@ -38,6 +50,11 @@ export type EnrolledClass = Omit<
 export type EnrollmentRequestStatus = "pending" | "accepted" | "rejected";
 
 export type EnrollmentRequest = {
+  semester?: number;
+  subjectCode?: string | null;
+  subjectName?: string | null;
+  requiredDepartment?: string | null;
+  requiredYear?: number | null;
   id: string;
   classId: string;
   studentId: string;
@@ -49,6 +66,16 @@ export type EnrollmentRequest = {
   studentName: string | null;
   studentEmail: string | null;
   studentProfileImageUrl: string | null;
+  declaredDepartment?: string | null;
+  declaredYear?: number | null;
+  declaredSection?: string | null;
+  officialDepartment?: string | null;
+  officialYear?: number | null;
+  officialSection?: string | null;
+  verificationStatus?: string;
+  eligibleForApproval?: boolean;
+  eligibilityMessage?: string | null;
+  corSubmitted?: boolean;
   corFileName: string;
   corFileType: string | null;
   corFileSize: number | null;
@@ -60,6 +87,8 @@ export type EnrollmentRequest = {
 
 export type ClassJoinLookup = {
   classroom: TeacherClass;
+  eligible: boolean;
+  eligibilityMessage: string | null;
   enrollment: { id: string; joinedAt: string } | null;
   request: {
     id: string;
@@ -75,9 +104,13 @@ export type ActivitySubmissionType = "essay" | "file" | "image" | "code";
 export type ActivityNotificationType =
   | "new_activity"
   | "upcoming_deadline"
-  | "new_submission";
+  | "new_submission"
+  | "enrollment_request"
+  | "enrollment_review";
 
 export type ActivityNotification = {
+  enrollmentRequestId?: string | null;
+  academicIntentId?: string | null;
   id: string;
   type: ActivityNotificationType;
   severity: "info" | "warning";
@@ -161,6 +194,8 @@ export type ActivityAttachment = {
 };
 
 export type ClassActivity = {
+  aiScoringEnabled?: boolean;
+  rubric?: RubricCriterion[];
   id: string;
   classId: string;
   className: string | null;
@@ -275,6 +310,14 @@ export type TeacherAnalytics = {
 };
 
 export type ClassSubmission = {
+  aiAssessment?: RubricAssessment | null;
+  aiScoringEnabled?: boolean;
+  gradeApproved?: boolean;
+  rubric?: RubricCriterion[];
+  rubricScores?: Record<string, number>;
+  computedScore?: number | null;
+  scoreOverridden?: boolean;
+  adjustmentNote?: string | null;
   id: string;
   activityId: string;
   classId: string | null;
@@ -317,9 +360,11 @@ export type SubmissionEvaluation = {
   evaluatedAt: string | null;
 };
 
-export type DocumentPreviewType = "activity-attachment" | "submission";
+export type DocumentPreviewType = "activity-attachment" | "submission" | "cor" | "academic-cor";
 
 export type PreviewDocument = {
+  code?: boolean;
+  language?: string | null;
   id: string;
   kind: DocumentPreviewType;
   title: string;
@@ -349,6 +394,15 @@ export type SubmissionAnalysisResult = {
 export type UploadProgressCallback = (progress: number) => void;
 
 type ApiClass = {
+  curriculum_active?: boolean;
+  semester?: number;
+  subject_id?: number | null;
+  subject_code?: string | null;
+  subject_name?: string | null;
+  grade_level?: string | null;
+  department_code?: string | null;
+  year_level?: number | null;
+  enrollment_open?: boolean;
   id: number;
   name: string;
   code: string;
@@ -365,6 +419,8 @@ type ApiClass = {
 type ApiEnrollmentStatus = "pending" | "accepted" | "rejected";
 
 type ApiEnrollmentRequest = {
+  semester?: number; requested_semester?: number;
+  subject_code?: string | null; subject_name?: string | null; requested_subject_code?: string | null; requested_subject_name?: string | null; class_department?: string | null; class_year?: number | null;
   id: number;
   class_id: number;
   student_id: number;
@@ -376,6 +432,9 @@ type ApiEnrollmentRequest = {
   student_name?: string | null;
   student_email?: string | null;
   student_profile_image_url?: string | null;
+  declared_department?: string | null; declared_year?: number | null; declared_section?: string | null;
+  official_department?: string | null; official_year?: number | null; official_section?: string | null;
+  verification_status?: string; eligible_for_approval?: boolean; eligibility_message?: string | null; cor_submitted?: boolean;
   cor_file_name?: string | null;
   cor_file_type?: string | null;
   cor_file_size?: number | string | null;
@@ -386,6 +445,14 @@ type ApiEnrollmentRequest = {
 };
 
 type ApiActivity = {
+  ai_scoring_enabled?: boolean;
+  ai_assessment?: RubricAssessment | null;
+  grade_approved?: boolean;
+  rubric?: RubricCriterion[];
+  rubric_scores?: Record<string, number>;
+  computed_score?: number | string | null;
+  score_overridden?: boolean;
+  adjustment_note?: string | null;
   id: number;
   class_id: number;
   class_name?: string;
@@ -462,6 +529,14 @@ type ApiTeacherOverviewActivity = {
 };
 
 type ApiSubmission = {
+  ai_scoring_enabled?: boolean;
+  ai_assessment?: RubricAssessment | null;
+  grade_approved?: boolean;
+  rubric?: RubricCriterion[];
+  rubric_scores?: Record<string, number>;
+  computed_score?: number | string | null;
+  score_overridden?: boolean;
+  adjustment_note?: string | null;
   id: number;
   activity_id: number;
   class_id?: number;
@@ -509,6 +584,8 @@ type ApiSubmissionHistory = {
 };
 
 type ApiPreviewDocument = {
+  code?: boolean;
+  language?: string | null;
   id: string | number;
   kind: DocumentPreviewType;
   title: string;
@@ -552,6 +629,8 @@ type ApiTeacherAnalytics = {
 };
 
 type ApiActivityNotification = {
+  enrollmentRequestId?: string | null;
+  academicIntentId?: string | null;
   id: string;
   type: ActivityNotificationType;
   severity: "info" | "warning";
@@ -699,6 +778,13 @@ async function postWithUploadProgress<T>(
 }
 
 const mapTeacherClass = (item: ApiClass): TeacherClass => ({
+  curriculumActive:item.curriculum_active,
+  semester: item.semester ?? 1,
+  subjectId: item.subject_id, subjectCode: item.subject_code, subjectName: item.subject_name,
+  gradeLevel: item.grade_level ?? null,
+  departmentCode: item.department_code ?? null,
+  yearLevel: item.year_level ?? null,
+  enrollmentOpen: item.enrollment_open !== false,
   id: String(item.id),
   name: item.name,
   code: item.code,
@@ -712,6 +798,10 @@ const mapTeacherClass = (item: ApiClass): TeacherClass => ({
 });
 
 const mapEnrolledClass = (item: ApiClass): EnrolledClass => ({
+  semester: item.semester ?? 1,
+  departmentCode: item.department_code ?? null,
+  yearLevel: item.year_level ?? null,
+  enrollmentOpen: item.enrollment_open !== false,
   id: String(item.id),
   name: item.name,
   code: item.code,
@@ -736,6 +826,8 @@ const mapEnrollmentStatus = (status: string): EnrollmentRequestStatus => {
 const mapEnrollmentRequest = (
   item: ApiEnrollmentRequest,
 ): EnrollmentRequest => ({
+  semester: item.requested_semester ?? item.semester ?? 1,
+  subjectCode: item.requested_subject_code ?? item.subject_code, subjectName: item.requested_subject_name ?? item.subject_name, requiredDepartment: item.class_department, requiredYear: item.class_year,
   id: String(item.id),
   classId: String(item.class_id),
   studentId: String(item.student_id),
@@ -747,6 +839,9 @@ const mapEnrollmentRequest = (
   studentName: item.student_name ?? null,
   studentEmail: item.student_email ?? null,
   studentProfileImageUrl: item.student_profile_image_url ?? null,
+  declaredDepartment: item.declared_department, declaredYear: item.declared_year, declaredSection: item.declared_section,
+  officialDepartment: item.official_department, officialYear: item.official_year, officialSection: item.official_section,
+  verificationStatus: item.verification_status, eligibleForApproval: item.eligible_for_approval, eligibilityMessage: item.eligibility_message, corSubmitted: item.cor_submitted,
   corFileName: item.cor_file_name ?? "Certificate of Registration",
   corFileType: item.cor_file_type ?? null,
   corFileSize: asNumber(item.cor_file_size),
@@ -809,6 +904,8 @@ const mapStudentSubmission = (item: ApiActivity): StudentActivitySubmission | nu
 };
 
 const mapActivity = (item: ApiActivity): ClassActivity => ({
+  rubric: item.rubric ?? [],
+  aiScoringEnabled: item.ai_scoring_enabled === true,
   id: String(item.id),
   classId: String(item.class_id),
   className: item.class_name ?? null,
@@ -915,6 +1012,8 @@ const mapTeacherAnalytics = (payload: ApiTeacherAnalytics): TeacherAnalytics => 
 });
 
 const mapNotification = (item: ApiActivityNotification): ActivityNotification => ({
+  enrollmentRequestId:item.enrollmentRequestId??null,
+  academicIntentId:item.academicIntentId??null,
   id: item.id,
   type: item.type,
   severity: item.severity === "warning" ? "warning" : "info",
@@ -941,6 +1040,14 @@ const mapSubmission = (item: ApiSubmission): ClassSubmission => {
 
   return {
     id: String(item.id),
+    rubric: item.rubric ?? [],
+  aiScoringEnabled: item.ai_scoring_enabled === true,
+    rubricScores: item.rubric_scores ?? {},
+    aiAssessment: item.ai_assessment ?? null,
+    gradeApproved: item.grade_approved !== false,
+    computedScore: asNumber(item.computed_score),
+    scoreOverridden: item.score_overridden === true,
+    adjustmentNote: item.adjustment_note ?? null,
     activityId: String(item.activity_id),
     classId: typeof item.class_id === "number" ? String(item.class_id) : null,
     className: item.class_name ?? null,
@@ -977,6 +1084,8 @@ const mapSubmission = (item: ApiSubmission): ClassSubmission => {
 };
 
 const mapPreviewDocument = (item: ApiPreviewDocument): PreviewDocument => ({
+  code: item.code === true,
+  language: item.language ?? null,
   id: String(item.id),
   kind: item.kind,
   title: item.title,
@@ -1039,9 +1148,11 @@ export async function deleteNotification(notificationId: string): Promise<void> 
 }
 
 export async function createTeacherClass(input: {
-  name: string;
+  subjectId: number;
+  semester: number;
+  departmentCode: string;
+  yearLevel: number;
   description: string;
-  code: string;
 }): Promise<TeacherClass> {
   const payload = await request<{ class: ApiClass }>("/", {
     method: "POST",
@@ -1054,6 +1165,8 @@ export async function createTeacherClass(input: {
 export async function lookupClassByCode(code: string): Promise<ClassJoinLookup> {
   const payload = await request<{
     class: ApiClass;
+    eligible: boolean;
+    eligibilityMessage: string | null;
     enrollment: { id: number; joined_at: string } | null;
     request: {
       id: number;
@@ -1069,6 +1182,8 @@ export async function lookupClassByCode(code: string): Promise<ClassJoinLookup> 
 
   return {
     classroom: mapTeacherClass(payload.class),
+    eligible: payload.eligible === true,
+    eligibilityMessage: payload.eligibilityMessage ?? null,
     enrollment: payload.enrollment
       ? {
           id: String(payload.enrollment.id),
@@ -1088,7 +1203,11 @@ export async function lookupClassByCode(code: string): Promise<ClassJoinLookup> 
 }
 
 export async function submitEnrollmentRequest(input: {
+  semester?: number;
+  departmentCode: string;
+  yearLevel: number;
   code: string;
+  section?: string;
   corFileName: string;
   corFileType: string;
   corFileSize: number;
@@ -1105,7 +1224,7 @@ export async function submitEnrollmentRequest(input: {
 }
 
 export async function fetchMyEnrollmentRequests(): Promise<EnrollmentRequest[]> {
-  const payload = await request<{ requests: ApiEnrollmentRequest[] }>(
+  const payload = await lmsRequest<{ requests: ApiEnrollmentRequest[] }>(
     "/enrollment-requests/mine",
   );
   return (payload.requests ?? []).map(mapEnrollmentRequest);
@@ -1114,7 +1233,7 @@ export async function fetchMyEnrollmentRequests(): Promise<EnrollmentRequest[]> 
 export async function fetchTeacherEnrollmentRequests(): Promise<
   EnrollmentRequest[]
 > {
-  const payload = await request<{ requests: ApiEnrollmentRequest[] }>(
+  const payload = await lmsRequest<{ requests: ApiEnrollmentRequest[] }>(
     "/enrollment-requests",
   );
   return (payload.requests ?? []).map(mapEnrollmentRequest);
@@ -1204,11 +1323,14 @@ export async function fetchActivityDetail(activityId: string): Promise<ActivityD
 export async function createClassActivity(
   classId: string,
   input: {
+    codeSettings?:CodeSettings;
     title: string;
     instructor: string;
     description: string;
     submissionType: ActivitySubmissionType;
     allowResubmission?: boolean;
+    rubric?: RubricCriterion[];
+    aiScoringEnabled?: boolean;
     maxScore?: number;
     programmingLanguage?: string;
     starterCode?: string;
@@ -1338,9 +1460,7 @@ export async function fetchClassSubmissions(
 export async function fetchSubmissionDetail(
   submissionId: string,
 ): Promise<ClassSubmission> {
-  const payload = await request<{ submission: ApiSubmission }>(
-    `/submissions/${submissionId}`,
-  );
+  const payload = await lmsRequest<{ submission: ApiSubmission }>(`/submissions/${submissionId}`);
 
   return mapSubmission(payload.submission);
 }
@@ -1352,6 +1472,12 @@ export async function saveSubmissionEvaluation(
     remarks?: string;
     grade?: string;
     score?: number | null;
+    rubricScores?: Record<string, number | string>;
+    submittedVersion?: number;
+    approve?: boolean;
+    override?: boolean;
+    restoreComputed?: boolean;
+    adjustmentNote?: string;
   },
 ): Promise<SubmissionEvaluation> {
   const payload = await request<{

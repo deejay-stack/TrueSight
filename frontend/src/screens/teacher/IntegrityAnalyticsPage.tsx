@@ -195,7 +195,7 @@ export default function IntegrityAnalyticsPage() {
 
   return (
     <div
-      className="role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
+      className="workspace-detail-page role-theme-page h-screen overflow-hidden text-[var(--app-text)]"
       style={getRoleThemeStyle("teacher", darkMode)}
     >
       <TeacherSidebar
